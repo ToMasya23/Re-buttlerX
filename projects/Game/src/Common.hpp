@@ -5,6 +5,8 @@
 enum class State
 {
 	Title,
+	Menu,
+	Battle,
 	Game,
 };
 

@@ -11,6 +11,8 @@
 		2C1778A31CE0B65500BB8AD0 /* icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 2C1778A21CE0B65500BB8AD0 /* icon.icns */; };
 		2C3DB74E2E15162600A3AFF8 /* Title.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DB7492E15162600A3AFF8 /* Title.cpp */; };
 		2C3DB74F2E15162600A3AFF8 /* Game.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DB74C2E15162600A3AFF8 /* Game.cpp */; };
+		2C3DB7502E15162600A3AFF8 /* Menu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DB7512E15162600A3AFF8 /* Menu.cpp */; };
+		2C3DB7522E15162600A3AFF8 /* Battle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DB7532E15162600A3AFF8 /* Battle.cpp */; };
 		2C5C46DD26B4F00D005E8C85 /* libcurl.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C5C46DC26B4F00D005E8C85 /* libcurl.tbd */; };
 		2C5C46DF26B4F014005E8C85 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C5C46DE26B4F014005E8C85 /* AudioToolbox.framework */; };
 		2C5C46E126B4F01C005E8C85 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C5C46E026B4F01C005E8C85 /* AVFoundation.framework */; };
@@ -51,6 +53,10 @@
 		2C3DB74B2E15162600A3AFF8 /* Common.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Common.hpp; sourceTree = "<group>"; };
 		2C3DB74C2E15162600A3AFF8 /* Game.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Game.cpp; sourceTree = "<group>"; };
 		2C3DB74D2E15162600A3AFF8 /* Game.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Game.hpp; sourceTree = "<group>"; };
+		2C3DB7512E15162600A3AFF8 /* Menu.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Menu.cpp; sourceTree = "<group>"; };
+		2C3DB7542E15162600A3AFF8 /* Menu.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Menu.hpp; sourceTree = "<group>"; };
+		2C3DB7532E15162600A3AFF8 /* Battle.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Battle.cpp; sourceTree = "<group>"; };
+		2C3DB7552E15162600A3AFF8 /* Battle.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Battle.hpp; sourceTree = "<group>"; };
 		2C5C46DC26B4F00D005E8C85 /* libcurl.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libcurl.tbd; path = usr/lib/libcurl.tbd; sourceTree = SDKROOT; };
 		2C5C46DE26B4F014005E8C85 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		2C5C46E026B4F01C005E8C85 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -147,6 +153,10 @@
 				2C3DB74D2E15162600A3AFF8 /* Game.hpp */,
 				2C3DB7492E15162600A3AFF8 /* Title.cpp */,
 				2C3DB74A2E15162600A3AFF8 /* Title.hpp */,
+				2C3DB7512E15162600A3AFF8 /* Menu.cpp */,
+				2C3DB7542E15162600A3AFF8 /* Menu.hpp */,
+				2C3DB7532E15162600A3AFF8 /* Battle.cpp */,
+				2C3DB7552E15162600A3AFF8 /* Battle.hpp */,
 				2C1778991CE0AA7C00BB8AD0 /* Main.cpp */,
 			);
 			path = src;
@@ -257,6 +267,8 @@
 			files = (
 				2C3DB74F2E15162600A3AFF8 /* Game.cpp in Sources */,
 				2C3DB74E2E15162600A3AFF8 /* Title.cpp in Sources */,
+				2C3DB7502E15162600A3AFF8 /* Menu.cpp in Sources */,
+				2C3DB7522E15162600A3AFF8 /* Battle.cpp in Sources */,
 				2C17789A1CE0AA7C00BB8AD0 /* Main.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

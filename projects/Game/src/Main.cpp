@@ -1,6 +1,8 @@
 ﻿# include <Siv3D.hpp> // Siv3D v0.6.16
 # include "Common.hpp"
 # include "Title.hpp"
+# include "Menu.hpp"
+# include "Battle.hpp"
 # include "Game.hpp"
 
 void Main()
@@ -11,6 +13,8 @@ void Main()
 
 	App manager;
 	manager.add<Title>(State::Title);
+	manager.add<Menu>(State::Menu);
+	manager.add<Battle>(State::Battle);
 	manager.add<Game>(State::Game);
 
 	while (System::Update())
