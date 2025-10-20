@@ -330,6 +330,8 @@
     <ClInclude Include="src\Common.hpp" />
     <ClInclude Include="src\Game.hpp" />
     <ClInclude Include="src\Title.hpp" />
+    <ClInclude Include="src\Util\AudioManager.hpp" />
+    <ClInclude Include="src\Util\Singleton.hpp" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>

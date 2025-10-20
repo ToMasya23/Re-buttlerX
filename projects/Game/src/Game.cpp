@@ -1,4 +1,5 @@
 ﻿# include "Game.hpp"
+# include "Util/AudioManager.hpp"
 
 Game::Game(const InitData& init)
 	: IScene{ init }
@@ -36,7 +37,8 @@ void Game::update()
 			// ブロックを配列から削除する（イテレータは無効になる）
 			m_bricks.erase(it);
 
-			m_brickSound.playOneShot(0.5);
+			//m_brickSound.playOneShot(0.5);
+			AudioManager::instance().playBrickHit();
 
 			++m_score;
 

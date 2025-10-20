@@ -1,4 +1,5 @@
 ﻿# include "Title.hpp"
+# include "Util/AudioManager.hpp"
 
 Title::Title(const InitData& init)
 	: IScene{ init }
@@ -22,10 +23,12 @@ void Title::update()
 	// ボタンのクリック処理
 	if (m_startButton.leftClicked()) // ゲームへ
 	{
+		AudioManager::instance().playClick();
 		changeScene(State::Game);
 	}
 	else if (m_exitButton.leftClicked()) // 終了
 	{
+		AudioManager::instance().playClick();
 		System::Exit();
 	}
 }
