@@ -1,5 +1,5 @@
-﻿# pragma once
-# include "Common.hpp"
+# pragma once
+# include "../Common.hpp"
 
 // タイトルシーン
 class Title : public App::Scene
@@ -12,3 +12,5 @@ public:
 
 	void draw() const override;
 };
+
+

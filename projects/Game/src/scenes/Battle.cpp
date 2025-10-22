@@ -37,3 +37,5 @@ void Battle::draw() const
 	const Font& boldFont = FontAsset(U"Bold");
 	boldFont(U"メニュー画面に戻る").drawAt(32, m_backButton.center(), ColorF{ 0.1 });
 }
+
+

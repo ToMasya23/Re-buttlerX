@@ -41,6 +41,17 @@
 		2C5C471126B4F08E005E8C85 /* libzlib.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C5C471026B4F08E005E8C85 /* libzlib.a */; };
 		2C6906D82298140F00A427D0 /* engine in Resources */ = {isa = PBXBuildFile; fileRef = 2C6906D72298140F00A427D0 /* engine */; };
 		2CD8412C283263B2005013A6 /* libboost_filesystem.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2CD8412B283263B2005013A6 /* libboost_filesystem.a */; };
+		3C0000010000000000000001 /* Lobby.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000110000000000000001 /* Lobby.cpp */; };
+		3C0000020000000000000001 /* Matching.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000210000000000000001 /* Matching.cpp */; };
+		3C0000030000000000000001 /* Result.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000310000000000000001 /* Result.cpp */; };
+		3C0000040000000000000001 /* PauseOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000410000000000000001 /* PauseOverlay.cpp */; };
+		3C0000050000000000000001 /* Settings.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000510000000000000001 /* Settings.cpp */; };
+		3C0000060000000000000001 /* HowToPlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000610000000000000001 /* HowToPlay.cpp */; };
+		3C0000070000000000000001 /* EffectViewer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000710000000000000001 /* EffectViewer.cpp */; };
+        3C2100000000000000000001 /* Game.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000011 /* Game.cpp (scenes) */; };
+        3C2100000000000000000003 /* Title.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000013 /* Title.cpp (scenes) */; };
+        3C2100000000000000000005 /* Menu.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000015 /* Menu.cpp (scenes) */; };
+        3C2100000000000000000007 /* Battle.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000017 /* Battle.cpp (scenes) */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +96,20 @@
 		2C5C471026B4F08E005E8C85 /* libzlib.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libzlib.a; path = ../../lib/macOS/zlib/libzlib.a; sourceTree = "<group>"; };
 		2C6906D72298140F00A427D0 /* engine */ = {isa = PBXFileReference; lastKnownFileType = folder; name = engine; path = App/engine; sourceTree = "<group>"; };
 		2CD8412B283263B2005013A6 /* libboost_filesystem.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libboost_filesystem.a; path = ../../lib/macOS/boost/libboost_filesystem.a; sourceTree = "<group>"; };
+        3C0000100000000000000001 /* Lobby.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Lobby.hpp; path = src/scenes/Lobby.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000110000000000000001 /* Lobby.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Lobby.cpp; path = src/scenes/Lobby.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000200000000000000001 /* Matching.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Matching.hpp; path = src/scenes/Matching.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000210000000000000001 /* Matching.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Matching.cpp; path = src/scenes/Matching.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000300000000000000001 /* Result.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Result.hpp; path = src/scenes/Result.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000310000000000000001 /* Result.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Result.cpp; path = src/scenes/Result.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000400000000000000001 /* PauseOverlay.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = PauseOverlay.hpp; path = src/pause/PauseOverlay.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000410000000000000001 /* PauseOverlay.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PauseOverlay.cpp; path = src/pause/PauseOverlay.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000500000000000000001 /* Settings.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Settings.hpp; path = src/pause/Settings.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000510000000000000001 /* Settings.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Settings.cpp; path = src/pause/Settings.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000600000000000000001 /* HowToPlay.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = HowToPlay.hpp; path = src/pause/HowToPlay.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000610000000000000001 /* HowToPlay.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = HowToPlay.cpp; path = src/pause/HowToPlay.cpp; sourceTree = SOURCE_ROOT; };
+        3C0000700000000000000001 /* EffectViewer.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = EffectViewer.hpp; path = src/pause/EffectViewer.hpp; sourceTree = SOURCE_ROOT; };
+        3C0000710000000000000001 /* EffectViewer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = EffectViewer.cpp; path = src/pause/EffectViewer.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -149,19 +174,58 @@
 			isa = PBXGroup;
 			children = (
 				2C3DB74B2E15162600A3AFF8 /* Common.hpp */,
-				2C3DB74C2E15162600A3AFF8 /* Game.cpp */,
-				2C3DB74D2E15162600A3AFF8 /* Game.hpp */,
-				2C3DB7492E15162600A3AFF8 /* Title.cpp */,
-				2C3DB74A2E15162600A3AFF8 /* Title.hpp */,
-				2C3DB7512E15162600A3AFF8 /* Menu.cpp */,
-				2C3DB7542E15162600A3AFF8 /* Menu.hpp */,
-				2C3DB7532E15162600A3AFF8 /* Battle.cpp */,
-				2C3DB7552E15162600A3AFF8 /* Battle.hpp */,
 				2C1778991CE0AA7C00BB8AD0 /* Main.cpp */,
+				3C1000000000000000000001 /* scenes */,
+				3C1000000000000000000002 /* pause */,
 			);
 			path = src;
 			sourceTree = "<group>";
 		};
+		3C1000000000000000000001 /* scenes */ = {
+			isa = PBXGroup;
+			children = (
+				3C0000110000000000000001 /* Lobby.cpp */,
+				3C0000100000000000000001 /* Lobby.hpp */,
+				3C0000210000000000000001 /* Matching.cpp */,
+				3C0000200000000000000001 /* Matching.hpp */,
+				3C0000310000000000000001 /* Result.cpp */,
+				3C0000300000000000000001 /* Result.hpp */,
+                3C2100000000000000000011 /* Game.cpp (scenes) */,
+                3C2100000000000000000012 /* Game.hpp (scenes) */,
+                3C2100000000000000000013 /* Title.cpp (scenes) */,
+                3C2100000000000000000014 /* Title.hpp (scenes) */,
+                3C2100000000000000000015 /* Menu.cpp (scenes) */,
+                3C2100000000000000000016 /* Menu.hpp (scenes) */,
+                3C2100000000000000000017 /* Battle.cpp (scenes) */,
+                3C2100000000000000000018 /* Battle.hpp (scenes) */,
+			);
+			name = scenes;
+			sourceTree = "<group>";
+		};
+		3C1000000000000000000002 /* pause */ = {
+			isa = PBXGroup;
+			children = (
+				3C0000410000000000000001 /* PauseOverlay.cpp */,
+				3C0000400000000000000001 /* PauseOverlay.hpp */,
+				3C0000510000000000000001 /* Settings.cpp */,
+				3C0000500000000000000001 /* Settings.hpp */,
+				3C0000610000000000000001 /* HowToPlay.cpp */,
+				3C0000600000000000000001 /* HowToPlay.hpp */,
+				3C0000710000000000000001 /* EffectViewer.cpp */,
+				3C0000700000000000000001 /* EffectViewer.hpp */,
+			);
+			name = pause;
+			path = src/pause;
+			sourceTree = SOURCE_ROOT;
+		};
+        3C2100000000000000000011 /* Game.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Game.cpp; path = src/scenes/Game.cpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000012 /* Game.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Game.hpp; path = src/scenes/Game.hpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000013 /* Title.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Title.cpp; path = src/scenes/Title.cpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000014 /* Title.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Title.hpp; path = src/scenes/Title.hpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000015 /* Menu.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Menu.cpp; path = src/scenes/Menu.cpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000016 /* Menu.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Menu.hpp; path = src/scenes/Menu.hpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000017 /* Battle.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Battle.cpp; path = src/scenes/Battle.cpp; sourceTree = SOURCE_ROOT; };
+        3C2100000000000000000018 /* Battle.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Battle.hpp; path = src/scenes/Battle.hpp; sourceTree = SOURCE_ROOT; };
 		2CC7F9861F45930A0071A239 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -265,11 +329,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2C3DB74F2E15162600A3AFF8 /* Game.cpp in Sources */,
-				2C3DB74E2E15162600A3AFF8 /* Title.cpp in Sources */,
-				2C3DB7502E15162600A3AFF8 /* Menu.cpp in Sources */,
-				2C3DB7522E15162600A3AFF8 /* Battle.cpp in Sources */,
+                3C2100000000000000000001 /* Game.cpp (scenes) in Sources */,
+                3C2100000000000000000003 /* Title.cpp (scenes) in Sources */,
+                3C2100000000000000000005 /* Menu.cpp (scenes) in Sources */,
+                3C2100000000000000000007 /* Battle.cpp (scenes) in Sources */,
 				2C17789A1CE0AA7C00BB8AD0 /* Main.cpp in Sources */,
+				3C0000010000000000000001 /* Lobby.cpp in Sources */,
+				3C0000020000000000000001 /* Matching.cpp in Sources */,
+				3C0000030000000000000001 /* Result.cpp in Sources */,
+				3C0000040000000000000001 /* PauseOverlay.cpp in Sources */,
+				3C0000050000000000000001 /* Settings.cpp in Sources */,
+				3C0000060000000000000001 /* HowToPlay.cpp in Sources */,
+				3C0000070000000000000001 /* EffectViewer.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

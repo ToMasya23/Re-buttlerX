@@ -1,4 +1,4 @@
-﻿# include "Title.hpp"
+# include "Title.hpp"
 
 Title::Title(const InitData& init)
 	: IScene{ init }
@@ -8,10 +8,10 @@ Title::Title(const InitData& init)
 
 void Title::update()
 {
-	// Enter または Space キーでメニューに遷移
+	// Enter または Space キーでロビーに遷移
 	if (KeyEnter.down() || KeySpace.down())
 	{
-		changeScene(State::Menu);
+		changeScene(State::Lobby);
 	}
 }
 
@@ -27,3 +27,5 @@ void Title::draw() const
 	const Font& boldFont = FontAsset(U"Bold");
 	boldFont(U"ENTER / SPACE を押してスタート").drawAt(24, Vec2{ 400, 300 }, ColorF{ 0.9 });
 }
+
+

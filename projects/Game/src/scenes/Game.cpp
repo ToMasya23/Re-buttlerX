@@ -1,4 +1,4 @@
-﻿# include "Game.hpp"
+# include "Game.hpp"
 
 Game::Game(const InitData& init)
 	: IScene{ init }
@@ -65,13 +65,20 @@ void Game::update()
 		m_ballVelocity = Vec2{ (m_ball.x - paddle.center().x) * 10, -m_ballVelocity.y }.setLength(BallSpeed);
 	}
 
+	// Esc でポーズメニュー
+	if (KeyEscape.down())
+	{
+		getData().previousState = State::Game;
+		changeScene(State::PauseOverlay);
+		return;
+	}
+
 	// 画面外に出るか、ブロックが無くなったら
 	if ((600 < m_ball.y) || m_bricks.isEmpty())
 	{
-		// タイトル画面へ
-		changeScene(State::Title);
-
+		// リザルトへ
 		getData().lastScore = m_score;
+		changeScene(State::Result);
 	}
 }
 
@@ -102,3 +109,5 @@ Rect Game::getPaddle() const
 {
 	return{ Arg::center(Cursor::Pos().x, 500), 60, 10 };
 }
+
+

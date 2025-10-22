@@ -1,5 +1,5 @@
 # pragma once
-# include "Common.hpp"
+# include "../Common.hpp"
 
 // 戦闘シーン
 class Battle : public App::Scene
@@ -18,3 +18,5 @@ private:
 
 	Transition m_backTransition{ 0.4s, 0.2s };
 };
+
+

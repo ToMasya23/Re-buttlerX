@@ -10,9 +10,8 @@ void Menu::update()
 {
 	// ボタンの更新
 	m_battleTransition.update(m_battleButton.mouseOver());
-	m_exitTransition.update(m_exitButton.mouseOver());
 
-	if (m_battleButton.mouseOver() || m_exitButton.mouseOver())
+	if (m_battleButton.mouseOver())
 	{
 		Cursor::RequestStyle(CursorStyle::Hand);
 	}
@@ -21,10 +20,6 @@ void Menu::update()
 	if (m_battleButton.leftClicked())
 	{
 		changeScene(State::Battle);
-	}
-	else if (m_exitButton.leftClicked())
-	{
-		System::Exit();
 	}
 }
 
@@ -38,9 +33,9 @@ void Menu::draw() const
 
 	// ボタン描画
 	m_battleButton.draw(ColorF{ 1.0, m_battleTransition.value() }).drawFrame(2);
-	m_exitButton.draw(ColorF{ 1.0, m_exitTransition.value() }).drawFrame(2);
 
 	const Font& boldFont = FontAsset(U"Bold");
 	boldFont(U"戦闘画面に進む").drawAt(32, m_battleButton.center(), ColorF{ 0.1 });
-	boldFont(U"EXIT").drawAt(36, m_exitButton.center(), ColorF{ 0.1 });
 }
+
+
