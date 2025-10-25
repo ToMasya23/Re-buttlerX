@@ -8,10 +8,10 @@ EffectViewerScene::EffectViewerScene(const InitData& init)
 
 void EffectViewerScene::update()
 {
-	if (KeyEscape.down())
-	{
-		changeScene(State::PauseOverlay);
-	}
+    if (KeyEscape.down())
+    {
+        changeScene(State::Game);
+    }
 }
 
 void EffectViewerScene::draw() const

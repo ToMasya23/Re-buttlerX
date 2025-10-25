@@ -44,7 +44,6 @@
 		3C0000010000000000000001 /* Lobby.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000110000000000000001 /* Lobby.cpp */; };
 		3C0000020000000000000001 /* Matching.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000210000000000000001 /* Matching.cpp */; };
 		3C0000030000000000000001 /* Result.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000310000000000000001 /* Result.cpp */; };
-		3C0000040000000000000001 /* PauseOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000410000000000000001 /* PauseOverlay.cpp */; };
 		3C0000050000000000000001 /* Settings.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000510000000000000001 /* Settings.cpp */; };
 		3C0000060000000000000001 /* HowToPlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000610000000000000001 /* HowToPlay.cpp */; };
 		3C0000070000000000000001 /* EffectViewer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C0000710000000000000001 /* EffectViewer.cpp */; };
@@ -102,8 +101,6 @@
         3C0000210000000000000001 /* Matching.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Matching.cpp; path = src/scenes/Matching.cpp; sourceTree = SOURCE_ROOT; };
         3C0000300000000000000001 /* Result.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Result.hpp; path = src/scenes/Result.hpp; sourceTree = SOURCE_ROOT; };
         3C0000310000000000000001 /* Result.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Result.cpp; path = src/scenes/Result.cpp; sourceTree = SOURCE_ROOT; };
-        3C0000400000000000000001 /* PauseOverlay.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = PauseOverlay.hpp; path = src/pause/PauseOverlay.hpp; sourceTree = SOURCE_ROOT; };
-        3C0000410000000000000001 /* PauseOverlay.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PauseOverlay.cpp; path = src/pause/PauseOverlay.cpp; sourceTree = SOURCE_ROOT; };
         3C0000500000000000000001 /* Settings.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Settings.hpp; path = src/pause/Settings.hpp; sourceTree = SOURCE_ROOT; };
         3C0000510000000000000001 /* Settings.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Settings.cpp; path = src/pause/Settings.cpp; sourceTree = SOURCE_ROOT; };
         3C0000600000000000000001 /* HowToPlay.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = HowToPlay.hpp; path = src/pause/HowToPlay.hpp; sourceTree = SOURCE_ROOT; };
@@ -205,8 +202,8 @@
 		3C1000000000000000000002 /* pause */ = {
 			isa = PBXGroup;
 			children = (
-				3C0000410000000000000001 /* PauseOverlay.cpp */,
-				3C0000400000000000000001 /* PauseOverlay.hpp */,
+                
+                
 				3C0000510000000000000001 /* Settings.cpp */,
 				3C0000500000000000000001 /* Settings.hpp */,
 				3C0000610000000000000001 /* HowToPlay.cpp */,
@@ -337,7 +334,7 @@
 				3C0000010000000000000001 /* Lobby.cpp in Sources */,
 				3C0000020000000000000001 /* Matching.cpp in Sources */,
 				3C0000030000000000000001 /* Result.cpp in Sources */,
-				3C0000040000000000000001 /* PauseOverlay.cpp in Sources */,
+                
 				3C0000050000000000000001 /* Settings.cpp in Sources */,
 				3C0000060000000000000001 /* HowToPlay.cpp in Sources */,
 				3C0000070000000000000001 /* EffectViewer.cpp in Sources */,

@@ -8,10 +8,10 @@ HowToPlayScene::HowToPlayScene(const InitData& init)
 
 void HowToPlayScene::update()
 {
-	if (KeyEscape.down())
-	{
-		changeScene(State::PauseOverlay);
-	}
+    if (KeyEscape.down())
+    {
+        changeScene(State::Game);
+    }
 }
 
 void HowToPlayScene::draw() const

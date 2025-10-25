@@ -1,8 +1,10 @@
 # pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../ui/PauseMenu.hpp"
+# include "../ui/BattleLayout.hpp"
 
-// ゲームシーン
+// ゲームシーン（PvE バトル）
 class Game : public App::Scene
 {
 public:
@@ -15,26 +17,23 @@ public:
 
 private:
 
-	// ブロックのサイズ
-	static constexpr Size BrickSize{ 40, 20 };
+	// ---- バトル用 ----
+	static constexpr int32 MaxHP = 100;
+	int32 m_playerHP = MaxHP;
+	int32 m_enemyHP = MaxHP;
+	bool m_showAttackOptions = false;
 
-	// ボールの速さ
-	static constexpr double BallSpeed = 480.0;
+	// 攻撃メッセージ＆入力待機
+	bool m_waitingForAcknowledge = false;
+	String m_battleMessage;
+	enum class NextAction { None, EnemyCounter, BackToSelection, FinishBattle };
+	NextAction m_nextAction = NextAction::None;
 
-	// ボールの速度
-	Vec2 m_ballVelocity{ 0, -BallSpeed };
-
-	// ボール
-	Circle m_ball{ 400, 400, 8 };
-
-	// ブロックの配列
-	Array<Rect> m_bricks;
-
-	// 現在のゲームのスコア
-	int32 m_score = 0;
-
-	// ブロックを壊したときの効果音
-	Audio m_brickSound{ GMInstrument::Woodblock, PianoKey::C5, 0.2s, 0.1s };
+	// 被弾エフェクト
+	enum class HitTarget { None, Player, Enemy };
+	HitTarget m_hitTarget = HitTarget::None;
+	Stopwatch m_hitTimer{ StartImmediately::No };
+	static constexpr double HitDuration = 0.25; // seconds
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;
@@ -43,21 +42,20 @@ private:
 	RenderTexture m_blurInternal;
 	RenderTexture m_blurTarget;
 
-RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[0]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_settingsButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_howToButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_effectButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[4]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+    PauseMenu m_pauseMenu;
 
-	Transition m_resumeTr{ 0.3s, 0.15s };
-	Transition m_settingsTr{ 0.3s, 0.15s };
-	Transition m_howToTr{ 0.3s, 0.15s };
-	Transition m_effectTr{ 0.3s, 0.15s };
-	Transition m_titleTr{ 0.3s, 0.15s };
-	Transition m_exitTr{ 0.3s, 0.15s };
+	// ボタンのホバー演出
+	Transition m_attackTr{ 0.3s, 0.15s };
+	Transition m_escapeTr{ 0.3s, 0.15s };
+	Transition m_attack1Tr{ 0.3s, 0.15s };
+	Transition m_attack2Tr{ 0.3s, 0.15s };
 
-	Rect getPaddle() const;
+	// ユーティリティ
+	void handlePlayerAttack(int32 damage);
+	void doEnemyCounterStep();
+	void finishBattleIfNeeded();
+	void startHitEffect(HitTarget target);
+	bool advanceInputDown() const;
 };
 
 

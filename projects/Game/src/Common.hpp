@@ -11,7 +11,6 @@ enum class State
     Lobby,
     Matching,
     Result,
-    PauseOverlay,
     Settings,
     HowToPlay,
     EffectViewer,
@@ -34,11 +33,6 @@ struct GameData
     // 直前にプレイしたモード
     GameMode lastMode = GameMode::Unknown;
 
-    // 一時停止（ポーズ）から戻るための直前シーン
-    State previousState = State::Title;
-
-	// ポーズ時に下層シーンを描画するための背景
-	DynamicTexture pauseBackground;
 };
 
 using App = SceneManager<State, GameData>;

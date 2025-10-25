@@ -8,10 +8,10 @@ SettingsScene::SettingsScene(const InitData& init)
 
 void SettingsScene::update()
 {
-	if (KeyEscape.down())
-	{
-		changeScene(State::PauseOverlay);
-	}
+    if (KeyEscape.down())
+    {
+        changeScene(State::Game);
+    }
 }
 
 void SettingsScene::draw() const
