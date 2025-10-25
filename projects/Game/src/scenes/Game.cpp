@@ -19,50 +19,60 @@ void Game::update()
 		return;
 	}
 
-	if (m_paused)
+    if (m_paused)
+    {
+        const PauseMenu::Action action = m_pauseMenu.update();
+        switch (action)
+        {
+        case PauseMenu::Action::Resume:
+            m_paused = false;
+            break;
+        case PauseMenu::Action::Settings:
+            changeScene(State::Settings);
+            break;
+        case PauseMenu::Action::HowToPlay:
+            changeScene(State::HowToPlay);
+            break;
+        case PauseMenu::Action::EffectViewer:
+            changeScene(State::EffectViewer);
+            break;
+        case PauseMenu::Action::Title:
+            changeScene(State::Title);
+            break;
+        case PauseMenu::Action::Exit:
+            System::Exit();
+            break;
+        default:
+            break;
+        }
+
+        return;
+    }
+
+	// ---- メッセージ待機中は進行を止める ----
+	if (m_waitingForAcknowledge)
 	{
-		m_resumeTr.update(m_resumeButton.mouseOver());
-		m_settingsTr.update(m_settingsButton.mouseOver());
-		m_howToTr.update(m_howToButton.mouseOver());
-		m_effectTr.update(m_effectButton.mouseOver());
-		m_titleTr.update(m_titleButton.mouseOver());
-		m_exitTr.update(m_exitButton.mouseOver());
-
-		if (m_resumeButton.mouseOver() || m_settingsButton.mouseOver() || m_howToButton.mouseOver()
-			|| m_effectButton.mouseOver() || m_titleButton.mouseOver() || m_exitButton.mouseOver())
+		if (advanceInputDown())
 		{
-			Cursor::RequestStyle(CursorStyle::Hand);
+			m_waitingForAcknowledge = false;
+			if (m_nextAction == NextAction::EnemyCounter)
+			{
+				doEnemyCounterStep();
+			}
+			else if (m_nextAction == NextAction::FinishBattle)
+			{
+				finishBattleIfNeeded();
+			}
+			else if (m_nextAction == NextAction::BackToSelection)
+			{
+				// そのまま選択に戻る
+			}
+			m_nextAction = NextAction::None;
 		}
-
-		if (m_resumeButton.leftClicked())
-		{
-			m_paused = false;
-		}
-		else if (m_settingsButton.leftClicked())
-		{
-			changeScene(State::Settings);
-		}
-		else if (m_howToButton.leftClicked())
-		{
-			changeScene(State::HowToPlay);
-		}
-		else if (m_effectButton.leftClicked())
-		{
-			changeScene(State::EffectViewer);
-		}
-		else if (m_titleButton.leftClicked())
-		{
-			changeScene(State::Title);
-		}
-		else if (m_exitButton.leftClicked())
-		{
-			System::Exit();
-		}
-
 		return;
 	}
 
-    // ---- PvE バトル更新 ----
+	// ---- PvE バトル更新 ----
     const Size sceneSize = Scene::Size();
 
     // ボタン領域定義（下部）
@@ -106,9 +116,11 @@ void Game::update()
 		}
 		else if (escapeBtn.leftClicked())
 		{
-			// 敗北として終了
+			// 敗北として終了（メッセージ表示）
 			m_playerHP = 0;
-			finishBattleIfNeeded();
+			m_battleMessage = U"プレイヤーは逃げ出した！";
+			m_waitingForAcknowledge = true;
+			m_nextAction = NextAction::FinishBattle;
 		}
 	}
 }
@@ -148,8 +160,17 @@ void Game::draw() const
 		m_sceneRT.clear(ColorF{ 0.18, 0.2, 0.24 });
 
 		// キャラ矩形
-		RectF(playerPos, entitySize).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
-		RectF(enemyPos, entitySize).rounded(6).draw(ColorF{ 0.9, 0.4, 0.4 });
+		{
+			// 被弾フラッシュ演出
+			const double t = m_hitTimer.sF();
+			const bool hitPlayer = (m_hitTarget == HitTarget::Player) && (t < HitDuration);
+			const bool hitEnemy  = (m_hitTarget == HitTarget::Enemy)  && (t < HitDuration);
+			const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
+			const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 0.3, 0.7, 0.9 };
+			const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 0.9, 0.4, 0.4 };
+			RectF(playerPos, entitySize).rounded(6).draw(playerColor);
+			RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+		}
 
 		const Font& bold = FontAsset(U"Bold");
 
@@ -178,36 +199,29 @@ void Game::draw() const
 			bold(U"攻撃する").drawAt(24, attackBtn.center(), ColorF{ 0.1 });
 			bold(U"逃げる").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
 		}
+
+		// メッセージウィンドウ
+		if (m_waitingForAcknowledge)
+		{
+			const double panelW = sceneSize.x - 40;
+			const double panelH = 110;
+			const double panelX = (sceneSize.x - panelW) / 2.0;
+			const double panelY = sceneSize.y - 8 - panelH;
+			const RoundRect msgPanel{ RectF{ panelX, panelY, panelW, panelH }, 8 };
+			msgPanel.draw(ColorF{ 0.95, 0.95, 0.96, 0.94 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+			FontAsset(U"Bold")(m_battleMessage).draw(24, Vec2{ msgPanel.rect.x + 20, msgPanel.rect.y + 20 }, ColorF{ 0.1 });
+			FontAsset(U"Bold")(U"キー入力で進む").draw(18, Vec2{ msgPanel.rect.x + 20, msgPanel.rect.y + 64 }, ColorF{ 0.2 });
+		}
 	}
 
-	if (m_paused)
-	{
-		Shader::GaussianBlur(m_sceneRT, m_blurInternal, m_blurTarget, BoxFilterSize::BoxFilter9x9);
-		m_blurTarget.draw();
-		Rect{ sceneSize }.draw(PauseTheme::Dimmer);
-
-		const Font& title = FontAsset(U"TitleFont");
-		const Font& bold = FontAsset(U"Bold");
-		const RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
-		panel.draw(PauseTheme::PanelFill).drawFrame(3, 0, PauseTheme::PanelFrame);
-		title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
-
-		m_resumeButton.draw(ColorF{ 1.0, m_resumeTr.value() }).drawFrame(2);
-		m_settingsButton.draw(ColorF{ 1.0, m_settingsTr.value() }).drawFrame(2);
-		m_howToButton.draw(ColorF{ 1.0, m_howToTr.value() }).drawFrame(2);
-		m_effectButton.draw(ColorF{ 1.0, m_effectTr.value() }).drawFrame(2);
-		m_titleButton.draw(ColorF{ 1.0, m_titleTr.value() }).drawFrame(2);
-		m_exitButton.draw(ColorF{ 1.0, m_exitTr.value() }).drawFrame(2);
-
-		bold(U"再開").drawAt(28, m_resumeButton.center(), ColorF{ 0.1 });
-		bold(U"設定").drawAt(28, m_settingsButton.center(), ColorF{ 0.1 });
-		bold(U"ゲーム説明").drawAt(28, m_howToButton.center(), ColorF{ 0.1 });
-		bold(U"効果確認").drawAt(28, m_effectButton.center(), ColorF{ 0.1 });
-		bold(U"タイトルへ").drawAt(28, m_titleButton.center(), ColorF{ 0.1 });
-		bold(U"EXIT").drawAt(28, m_exitButton.center(), ColorF{ 0.1 });
-
-		Cursor::RequestStyle(CursorStyle::Default);
-	}
+    if (m_paused)
+    {
+        Shader::GaussianBlur(m_sceneRT, m_blurInternal, m_blurTarget, BoxFilterSize::BoxFilter9x9);
+        m_blurTarget.draw();
+        Rect{ sceneSize }.draw(PauseTheme::Dimmer);
+        m_pauseMenu.draw();
+        Cursor::RequestStyle(CursorStyle::Default);
+    }
 	else
 	{
 		m_sceneRT.draw();
@@ -217,22 +231,39 @@ void Game::draw() const
 
 void Game::handlePlayerAttack(int32 damage)
 {
+	// ダメージ適用と演出開始
 	m_enemyHP = Max(0, m_enemyHP - damage);
+	startHitEffect(HitTarget::Enemy);
+	m_battleMessage = U"プレイヤーは敵に攻撃した！{}のダメージを与えた！"_fmt(damage);
+	m_waitingForAcknowledge = true;
+
+	// 次のアクション判定
 	if (m_enemyHP <= 0)
 	{
-		finishBattleIfNeeded();
-		return;
+		m_nextAction = NextAction::FinishBattle;
 	}
-
-	// 反撃
-	enemyCounterAttack();
+	else
+	{
+		m_nextAction = NextAction::EnemyCounter;
+	}
 }
 
-void Game::enemyCounterAttack()
+void Game::doEnemyCounterStep()
 {
 	const int32 enemyDamage = Random(8, 16);
 	m_playerHP = Max(0, m_playerHP - enemyDamage);
-	finishBattleIfNeeded();
+	startHitEffect(HitTarget::Player);
+	m_battleMessage = U"敵はプレイヤーに攻撃した！{}のダメージを与えた！"_fmt(enemyDamage);
+	m_waitingForAcknowledge = true;
+
+	if (m_playerHP <= 0)
+	{
+		m_nextAction = NextAction::FinishBattle;
+	}
+	else
+	{
+		m_nextAction = NextAction::BackToSelection;
+	}
 }
 
 void Game::finishBattleIfNeeded()
@@ -243,6 +274,17 @@ void Game::finishBattleIfNeeded()
 		getData().lastScore = Max(0, m_playerHP);
 		changeScene(State::Result);
 	}
+}
+
+void Game::startHitEffect(HitTarget target)
+{
+	m_hitTarget = target;
+	m_hitTimer.restart();
+}
+
+bool Game::advanceInputDown() const
+{
+	return (MouseL.down() || KeyEnter.down() || KeySpace.down() || KeyZ.down() || KeyX.down());
 }
 
 

@@ -8,7 +8,6 @@
 # include "scenes/Lobby.hpp"
 # include "scenes/Matching.hpp"
 # include "scenes/Result.hpp"
-# include "pause/PauseOverlay.hpp"
 # include "pause/Settings.hpp"
 # include "pause/HowToPlay.hpp"
 # include "pause/EffectViewer.hpp"
@@ -30,7 +29,6 @@ void Main()
     manager.add<Lobby>(State::Lobby);
     manager.add<Matching>(State::Matching);
     manager.add<ResultScene>(State::Result);
-    manager.add<PauseOverlay>(State::PauseOverlay);
     manager.add<SettingsScene>(State::Settings);
     manager.add<HowToPlayScene>(State::HowToPlay);
     manager.add<EffectViewerScene>(State::EffectViewer);

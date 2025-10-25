@@ -1,6 +1,7 @@
 # pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../ui/PauseMenu.hpp"
 # include "../ui/BattleLayout.hpp"
 
 // ゲームシーン（PvE バトル）
@@ -22,6 +23,18 @@ private:
 	int32 m_enemyHP = MaxHP;
 	bool m_showAttackOptions = false;
 
+	// 攻撃メッセージ＆入力待機
+	bool m_waitingForAcknowledge = false;
+	String m_battleMessage;
+	enum class NextAction { None, EnemyCounter, BackToSelection, FinishBattle };
+	NextAction m_nextAction = NextAction::None;
+
+	// 被弾エフェクト
+	enum class HitTarget { None, Player, Enemy };
+	HitTarget m_hitTarget = HitTarget::None;
+	Stopwatch m_hitTimer{ StartImmediately::No };
+	static constexpr double HitDuration = 0.25; // seconds
+
 	// ---- ポーズ用 ----
 	bool m_paused = false;
 	bool m_pauseAwaitingCapture = false;
@@ -29,19 +42,7 @@ private:
 	RenderTexture m_blurInternal;
 	RenderTexture m_blurTarget;
 
-RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[0]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_settingsButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_howToButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_effectButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[4]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-
-	Transition m_resumeTr{ 0.3s, 0.15s };
-	Transition m_settingsTr{ 0.3s, 0.15s };
-	Transition m_howToTr{ 0.3s, 0.15s };
-	Transition m_effectTr{ 0.3s, 0.15s };
-	Transition m_titleTr{ 0.3s, 0.15s };
-	Transition m_exitTr{ 0.3s, 0.15s };
+    PauseMenu m_pauseMenu;
 
 	// ボタンのホバー演出
 	Transition m_attackTr{ 0.3s, 0.15s };
@@ -51,8 +52,10 @@ RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5
 
 	// ユーティリティ
 	void handlePlayerAttack(int32 damage);
-	void enemyCounterAttack();
+	void doEnemyCounterStep();
 	void finishBattleIfNeeded();
+	void startHitEffect(HitTarget target);
+	bool advanceInputDown() const;
 };
 
 
