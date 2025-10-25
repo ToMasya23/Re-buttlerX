@@ -36,6 +36,9 @@ struct GameData
 
     // 一時停止（ポーズ）から戻るための直前シーン
     State previousState = State::Title;
+
+	// ポーズ時に下層シーンを描画するための背景
+	DynamicTexture pauseBackground;
 };
 
 using App = SceneManager<State, GameData>;

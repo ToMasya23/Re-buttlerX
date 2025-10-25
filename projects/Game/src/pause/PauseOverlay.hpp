@@ -1,5 +1,6 @@
 # pragma once
 # include "../Common.hpp"
+# include "../ui/PauseTheme.hpp"
 
 // ポーズメニュー（フローティングウィンドウ的に扱うがシーンとして実装）
 class PauseOverlay : public App::Scene
@@ -14,12 +15,12 @@ public:
 
 private:
 
-	RoundRect m_resumeButton{ Arg::center(400, 280), 320, 56, 8 };
-	RoundRect m_settingsButton{ Arg::center(400, 350), 320, 56, 8 };
-	RoundRect m_howToButton{ Arg::center(400, 420), 320, 56, 8 };
-	RoundRect m_effectButton{ Arg::center(400, 490), 320, 56, 8 };
-	RoundRect m_titleButton{ Arg::center(400, 560), 320, 56, 8 };
-	RoundRect m_exitButton{ Arg::center(400, 630), 320, 56, 8 };
+RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[0]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+RoundRect m_settingsButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+RoundRect m_howToButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+RoundRect m_effectButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[4]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
 
 	Transition m_resumeTr{ 0.3s, 0.15s };
 	Transition m_settingsTr{ 0.3s, 0.15s };

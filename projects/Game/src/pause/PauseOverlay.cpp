@@ -8,6 +8,17 @@ PauseOverlay::PauseOverlay(const InitData& init)
 
 void PauseOverlay::update()
 {
+	// 初回フレームでスクリーンショットが用意されていれば取り込む
+	if (ScreenCapture::HasNewFrame())
+	{
+		// DynamicTexture へ直接書き込み（失敗時は空にして再取得を試みる）
+		if (not ScreenCapture::GetFrame(getData().pauseBackground))
+		{
+			getData().pauseBackground = DynamicTexture{};
+			ScreenCapture::GetFrame(getData().pauseBackground);
+		}
+	}
+
 	m_resumeTr.update(m_resumeButton.mouseOver());
 	m_settingsTr.update(m_settingsButton.mouseOver());
 	m_howToTr.update(m_howToButton.mouseOver());
@@ -56,17 +67,22 @@ void PauseOverlay::update()
 
 void PauseOverlay::draw() const
 {
-	// 背景を半透明で暗くする
-	Scene::Rect().draw(ColorF{ 0.0, 0.6 });
+	// 背景に直前フレームの画を描画（無ければ暗転のみ）
+	if (getData().pauseBackground)
+	{
+		getData().pauseBackground.draw();
+	}
+	// 暗転オーバーレイ
+	Rect{ Scene::Size() }.draw(PauseTheme::Dimmer);
 
 	const Font& title = FontAsset(U"TitleFont");
 	const Font& bold = FontAsset(U"Bold");
 
-	// 中央パネル
-	const RoundRect panel{ Arg::center(400, 430), 520, 460, 12 };
-	panel.draw(ColorF{ 0.95, 0.95, 0.96 }).drawFrame(3, 0, ColorF{ 0.2, 0.2, 0.3 });
+	// 中央パネル（テーマから）
+	const RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
+	panel.draw(PauseTheme::PanelFill).drawFrame(3, 0, PauseTheme::PanelFrame);
 
-	title(U"PAUSE").drawAt(64, Vec2{ 400, 230 }, ColorF{ 0.15 });
+	title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
 
 	m_resumeButton.draw(ColorF{ 1.0, m_resumeTr.value() }).drawFrame(2);
 	m_settingsButton.draw(ColorF{ 1.0, m_settingsTr.value() }).drawFrame(2);
