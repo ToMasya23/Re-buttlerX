@@ -1,8 +1,9 @@
 # pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../ui/BattleLayout.hpp"
 
-// ゲームシーン
+// ゲームシーン（PvE バトル）
 class Game : public App::Scene
 {
 public:
@@ -15,26 +16,11 @@ public:
 
 private:
 
-	// ブロックのサイズ
-	static constexpr Size BrickSize{ 40, 20 };
-
-	// ボールの速さ
-	static constexpr double BallSpeed = 480.0;
-
-	// ボールの速度
-	Vec2 m_ballVelocity{ 0, -BallSpeed };
-
-	// ボール
-	Circle m_ball{ 400, 400, 8 };
-
-	// ブロックの配列
-	Array<Rect> m_bricks;
-
-	// 現在のゲームのスコア
-	int32 m_score = 0;
-
-	// ブロックを壊したときの効果音
-	Audio m_brickSound{ GMInstrument::Woodblock, PianoKey::C5, 0.2s, 0.1s };
+	// ---- バトル用 ----
+	static constexpr int32 MaxHP = 100;
+	int32 m_playerHP = MaxHP;
+	int32 m_enemyHP = MaxHP;
+	bool m_showAttackOptions = false;
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;
@@ -57,7 +43,16 @@ RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5
 	Transition m_titleTr{ 0.3s, 0.15s };
 	Transition m_exitTr{ 0.3s, 0.15s };
 
-	Rect getPaddle() const;
+	// ボタンのホバー演出
+	Transition m_attackTr{ 0.3s, 0.15s };
+	Transition m_escapeTr{ 0.3s, 0.15s };
+	Transition m_attack1Tr{ 0.3s, 0.15s };
+	Transition m_attack2Tr{ 0.3s, 0.15s };
+
+	// ユーティリティ
+	void handlePlayerAttack(int32 damage);
+	void enemyCounterAttack();
+	void finishBattleIfNeeded();
 };
 
 
