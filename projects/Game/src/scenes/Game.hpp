@@ -22,6 +22,7 @@ private:
 	int32 m_playerHP = MaxHP;
 	int32 m_enemyHP = MaxHP;
 	bool m_showAttackOptions = false;
+	int32 m_cost = 100; // 0..100
 
 	// 攻撃メッセージ＆入力待機
 	bool m_waitingForAcknowledge = false;
