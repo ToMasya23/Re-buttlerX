@@ -8,6 +8,31 @@ namespace
 Game::Game(const InitData& init)
 	: IScene{ init }
 {
+    // 顔テクスチャをロード（素材は assets/ui/faces/ 配下）
+    m_texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
+    m_texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
+    m_texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
+    m_texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+}
+
+const s3d::Texture& Game::selectFaceTexture(int crazyPercent) const
+{
+    if (crazyPercent < 40)
+    {
+        return m_texSmile; // 笑顔
+    }
+    else if (crazyPercent < 60)
+    {
+        return m_texMagao; // 真顔
+    }
+    else if (crazyPercent < 80)
+    {
+        return m_texCloudy; // 怪しい
+    }
+    else
+    {
+        return m_texCrying; // 泣き
+    }
 }
 
 void Game::update()
@@ -49,7 +74,19 @@ void Game::update()
         return;
     }
 
-	// ---- メッセージ待機中は進行を止める ----
+    // コスト回復（停止条件を考慮）
+    if (!isRegenBlocked())
+    {
+        regenCost(Scene::DeltaTime());
+    }
+
+    // 防御の継続時間チェック
+    if (m_defending && (m_defendTimer.sF() >= DefendDurationSec))
+    {
+        m_defending = false;
+    }
+
+    // ---- メッセージ待機中は進行を止める ----
 	if (m_waitingForAcknowledge)
 	{
 		if (advanceInputDown())
@@ -82,29 +119,60 @@ void Game::update()
     const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
     const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
 
-    // 攻撃／逃げるの入力
+    // 攻撃／逃げる／防御の入力
     m_attack1Tr.update(attackBtn1.mouseOver());
     m_attack2Tr.update(attackBtn2.mouseOver());
-    if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver())
+    const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
+    const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+    if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
     {
         Cursor::RequestStyle(CursorStyle::Hand);
     }
 
+    // 攻撃可否（防御中・待機中・コスト不足で不可）
     if (attackBtn1.leftClicked())
     {
-        handlePlayerAttack(Damage1);
+        if (canAttack(U"攻撃1") && trySpendCost(10))
+            handlePlayerAttack(Damage1);
+        else
+        {
+            m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
     }
     else if (attackBtn2.leftClicked())
     {
-        handlePlayerAttack(Damage2);
+        if (canAttack(U"攻撃2") && trySpendCost(10))
+            handlePlayerAttack(Damage2);
+        else
+        {
+            m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
     }
     else if (attackBtn3.leftClicked())
     {
-        handlePlayerAttack(Damage1 + 5);
+        if (canAttack(U"攻撃3") && trySpendCost(10))
+            handlePlayerAttack(Damage1 + 5);
+        else
+        {
+            m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
     }
     else if (attackBtn4.leftClicked())
     {
-        handlePlayerAttack(Damage2 + 10);
+        if (canAttack(U"攻撃4") && trySpendCost(10))
+            handlePlayerAttack(Damage2 + 10);
+        else
+        {
+            m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
     }
     else if (escapeBtn.leftClicked())
     {
@@ -113,6 +181,23 @@ void Game::update()
         m_battleMessage = U"プレイヤーは逃げ出した！";
         m_waitingForAcknowledge = true;
         m_nextAction = NextAction::FinishBattle;
+    }
+    else if (defendBtn.leftClicked())
+    {
+        if (canDefend() && trySpendCost(20))
+        {
+            m_defending = true;
+            m_defendTimer.restart();
+            m_battleMessage = U"防御体勢に入った！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
+        else if (!m_defending)
+        {
+            m_battleMessage = U"コスト不足！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::BackToSelection;
+        }
     }
 }
 
@@ -163,14 +248,43 @@ void Game::draw() const
 		const Font& bold = FontAsset(U"Bold");
 
         // HPバー（自分・頭上）
-        BattleLayout::PlayerHPBarBG(sceneSize).draw(ColorF{ 0.2 });
-        RectF{ BattleLayout::PlayerHPBarBG(sceneSize).x, BattleLayout::PlayerHPBarBG(sceneSize).y, static_cast<double>(playerHPWidth), BattleLayout::HPBarHeight }.draw(ColorF{ 0.2, 0.8, 0.3 });
+        const RectF playerHPBar = BattleLayout::PlayerHPBarBG(sceneSize);
+        const ColorF playerHPColor = hpColor(m_playerHP, MaxHP);
+        playerHPBar.draw(ColorF{ 0.2 });
+        RectF{ playerHPBar.x, playerHPBar.y, static_cast<double>(playerHPWidth), BattleLayout::HPBarHeight }.draw(playerHPColor);
         bold(U"HP {}/{}"_fmt(m_playerHP, MaxHP)).draw(16, BattleLayout::PlayerHPLabelPos(sceneSize), ColorF{ 0.95 });
 
         // HPバー（敵・頭上）
-        BattleLayout::EnemyHPBarBG(sceneSize).draw(ColorF{ 0.2 });
-        RectF{ BattleLayout::EnemyHPBarBG(sceneSize).x, BattleLayout::EnemyHPBarBG(sceneSize).y, static_cast<double>(enemyHPWidth), BattleLayout::HPBarHeight }.draw(ColorF{ 0.9, 0.3, 0.3 });
+        const RectF enemyHPBar = BattleLayout::EnemyHPBarBG(sceneSize);
+        const ColorF enemyHPColor = hpColor(m_enemyHP, MaxHP);
+        enemyHPBar.draw(ColorF{ 0.2 });
+        RectF{ enemyHPBar.x, enemyHPBar.y, static_cast<double>(enemyHPWidth), BattleLayout::HPBarHeight }.draw(enemyHPColor);
         bold(U"HP {}/{}"_fmt(m_enemyHP, MaxHP)).draw(16, BattleLayout::EnemyHPLabelPos(sceneSize), ColorF{ 0.95 });
+
+        // クレイジーゲージ（プレイヤー）
+        {
+            const Vec2 c = BattleLayout::PlayerCrazyCenter(sceneSize);
+            const double ratio = Clamp(m_playerCrazy / 100.0, 0.0, 1.0);
+            Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
+            const double angle = Math::TwoPiF * ratio;
+            Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 0.2, 0.6, 1.0 });
+            // 顔テクスチャ
+            const s3d::Texture& face = selectFaceTexture(m_playerCrazy);
+            const double s = 26.0;
+            face.scaled(s / face.height()).drawAt(c);
+        }
+
+        // クレイジーゲージ（敵）
+        {
+            const Vec2 c = BattleLayout::EnemyCrazyCenter(sceneSize);
+            const double ratio = Clamp(m_enemyCrazy / 100.0, 0.0, 1.0);
+            Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
+            const double angle = Math::TwoPiF * ratio;
+            Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 1.0, 0.4, 0.4 });
+            const s3d::Texture& face = selectFaceTexture(m_enemyCrazy);
+            const double s = 26.0;
+            face.scaled(s / face.height()).drawAt(c);
+        }
 
         // 左上の攻撃1〜4（背景色統一）
         const RoundRect attackBtn1 = BattleLayout::AttackOptionButton(sceneSize, 0);
@@ -195,12 +309,13 @@ void Game::draw() const
         const RectF costPanel = BattleLayout::CostPanelRect(sceneSize);
         const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
         costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
-        const int32 cost = Clamp(m_cost, 0, 100);
+        const int32 cost = this->cost();
         const double w = costPanel.w - 24;
         const RectF barBG{ costPanel.x + 12, costPanel.y + costPanel.h - 22, w, 10 };
         const RectF barFG{ barBG.x, barBG.y, w * (cost / 100.0), barBG.h };
-        barBG.draw(ColorF{ 0.8 });
-        barFG.draw(ColorF{ 0.2, 0.6, 1.0 });
+        const bool blocked = isRegenBlocked();
+        barBG.draw(ColorF{ 0.85 });
+        barFG.draw(blocked ? ColorF{ 0.6 } : ColorF{ 0.2, 0.6, 1.0 });
         FontAsset(U"Bold")(U"COST {}/100"_fmt(cost)).draw(20, Vec2{ costPanel.x + 12, costPanel.y + 10 }, ColorF{ 0.1 });
 
         // 左下プレイヤーパネル
@@ -249,6 +364,10 @@ void Game::handlePlayerAttack(int32 damage)
 	m_battleMessage = U"プレイヤーは敵に攻撃した！{}のダメージを与えた！"_fmt(damage);
 	m_waitingForAcknowledge = true;
 
+	// クレイジーゲージ効果
+	addCrazy(true, +20);   // 敵を増やす
+	addCrazy(false, -10);  // 自分は減らす（バフ）
+
 	// 次のアクション判定
 	if (m_enemyHP <= 0)
 	{
@@ -263,9 +382,18 @@ void Game::handlePlayerAttack(int32 damage)
 void Game::doEnemyCounterStep()
 {
 	const int32 enemyDamage = Random(8, 16);
-	m_playerHP = Max(0, m_playerHP - enemyDamage);
+	int32 finalDamage = enemyDamage;
+	if (m_defending)
+	{
+		finalDamage = 0;
+	}
+	m_playerHP = Max(0, m_playerHP - finalDamage);
+	// 敵の攻撃でプレイヤーのクレイジーが増加
+	addCrazy(false, +20);
 	startHitEffect(HitTarget::Player);
-	m_battleMessage = U"敵はプレイヤーに攻撃した！{}のダメージを与えた！"_fmt(enemyDamage);
+	m_battleMessage = (finalDamage == 0)
+		? U"敵は攻撃したが、防御した！0のダメージ！"
+		: U"敵はプレイヤーに攻撃した！{}のダメージを与えた！"_fmt(finalDamage);
 	m_waitingForAcknowledge = true;
 
 	if (m_playerHP <= 0)
@@ -297,6 +425,73 @@ void Game::startHitEffect(HitTarget target)
 bool Game::advanceInputDown() const
 {
 	return (MouseL.down() || KeyEnter.down() || KeySpace.down() || KeyZ.down() || KeyX.down());
+}
+
+void Game::regenCost(double dt)
+{
+	m_costValue = Min(100.0, m_costValue + (CostRegenPerSec * dt));
+}
+
+int32 Game::calcAttackCost(const String& label) const
+{
+	return static_cast<int32>(label.size());
+}
+
+bool Game::trySpendCost(int32 amount)
+{
+	if (cost() < amount)
+	{
+		return false;
+	}
+	m_costValue = Max(0.0, m_costValue - amount);
+	return true;
+}
+
+bool Game::isRegenBlocked() const
+{
+	return (m_defending || m_waitingForAcknowledge);
+}
+
+bool Game::canAttack(const String& label) const
+{
+    (void)label; // ラベル長は使用しない（コストは呼び出し側で判定）
+    if (m_defending || m_waitingForAcknowledge)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool Game::canDefend() const
+{
+	if (m_defending || m_waitingForAcknowledge)
+	{
+		return false;
+	}
+	return (cost() >= 20);
+}
+
+void Game::addCrazy(bool targetIsEnemy, int32 delta)
+{
+	int32& v = targetIsEnemy ? m_enemyCrazy : m_playerCrazy;
+	v = Clamp(v + delta, 0, 100);
+}
+
+ColorF Game::hpColor(int hp, int maxHP)
+{
+	const double r = Clamp(static_cast<double>(hp) / Max(1, maxHP), 0.0, 1.0);
+	if (r >= 0.5)
+	{
+		return ColorF{ 0.2, 0.8, 0.3 }; // 緑
+	}
+	else if (r >= 0.2)
+	{
+		return ColorF{ 0.95, 0.85, 0.2 }; // 黄
+	}
+	else
+	{
+		return ColorF{ 0.9, 0.3, 0.3 }; // 赤
+	}
 }
 
 
