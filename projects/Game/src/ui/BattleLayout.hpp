@@ -42,7 +42,7 @@ namespace BattleLayout
 
 	inline Vec2 EnemyPos(const Size& sceneSize)
 	{
-		return Vec2{ static_cast<double>(sceneSize.x) - 250.0, 70.0 };
+		return Vec2{ static_cast<double>(sceneSize.x) - 290.0, 70.0 };
 	}
 
 	inline RectF PlayerHPBarBG(const Size& sceneSize)
@@ -68,6 +68,20 @@ namespace BattleLayout
 		const Vec2 p = EnemyPos(sceneSize);
 		return Vec2{ p.x, p.y - HPBarAboveOffset - HPBarHeight - HPLabelAboveOffset };
 	}
+
+// クレイジーゲージ（HPバー右端に配置）
+inline constexpr double CrazyRingRadius = 20.0;
+inline constexpr double CrazyRingOffsetX = 18.0; // HPバー右端からのオフセット
+inline Vec2 PlayerCrazyCenter(const Size& sceneSize)
+{
+    const RectF bar = PlayerHPBarBG(sceneSize);
+    return Vec2{ bar.x + bar.w + CrazyRingOffsetX, bar.y + bar.h * 0.5 };
+}
+inline Vec2 EnemyCrazyCenter(const Size& sceneSize)
+{
+    const RectF bar = EnemyHPBarBG(sceneSize);
+    return Vec2{ bar.x + bar.w + CrazyRingOffsetX, bar.y + bar.h * 0.5 };
+}
 
 	// 左上：攻撃1〜4 ボタン
 	inline RoundRect AttackOptionButton(const Size& sceneSize, int index)
