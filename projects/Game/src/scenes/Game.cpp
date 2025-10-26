@@ -8,6 +8,31 @@ namespace
 Game::Game(const InitData& init)
 	: IScene{ init }
 {
+    // 顔テクスチャをロード（素材は assets/ui/faces/ 配下）
+    m_texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
+    m_texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
+    m_texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
+    m_texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+}
+
+const s3d::Texture& Game::selectFaceTexture(int crazyPercent) const
+{
+    if (crazyPercent < 40)
+    {
+        return m_texSmile; // 笑顔
+    }
+    else if (crazyPercent < 60)
+    {
+        return m_texMagao; // 真顔
+    }
+    else if (crazyPercent < 80)
+    {
+        return m_texCloudy; // 怪しい
+    }
+    else
+    {
+        return m_texCrying; // 泣き
+    }
 }
 
 void Game::update()
@@ -241,37 +266,12 @@ void Game::draw() const
             const Vec2 c = BattleLayout::PlayerCrazyCenter(sceneSize);
             const double ratio = Clamp(m_playerCrazy / 100.0, 0.0, 1.0);
             Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
-            // 進捗アーク
             const double angle = Math::TwoPiF * ratio;
             Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 0.2, 0.6, 1.0 });
-            // 顔表示
-            const int pct = m_playerCrazy;
-            // 0-40 笑顔, 40-60 真顔, 60-80 怪しい, 80-100 泣き
-            const ColorF faceColor{ 1.0, 0.98, 0.6 };
-            Circle{ c, 12 }.draw(faceColor).drawFrame(1, 0, ColorF{ 0.1 });
-            // 目
-            Circle{ c + Vec2{ -4, -2 }, 1.5 }.draw(ColorF{ 0.1 });
-            Circle{ c + Vec2{  4, -2 }, 1.5 }.draw(ColorF{ 0.1 });
-            // 口
-            if (pct < 40)
-            {
-                // 笑顔（水平の弧）
-                Circle{ c + Vec2{ 0, 6 }, 6 }.drawArc(Math::Pi * 0.15, Math::Pi * 0.7, 1.5, 0, ColorF{ 0.1 });
-            }
-            else if (pct < 60)
-            {
-                Line{ c + Vec2{ -4, 3 }, c + Vec2{ 4, 3 } }.draw(1.5, ColorF{ 0.1 });
-            }
-            else if (pct < 80)
-            {
-                // 怪しい（への字）
-                Line{ c + Vec2{ -4, 4 }, c + Vec2{ 4, 1 } }.draw(1.5, ColorF{ 0.1 });
-            }
-            else
-            {
-                // 泣き顔（逆弧・水平）
-                Circle{ c + Vec2{ 0, 9 }, 6 }.drawArc(Math::Pi * 1.15, Math::Pi * 0.7, 1.5, 0, ColorF{ 0.1 });
-            }
+            // 顔テクスチャ
+            const s3d::Texture& face = selectFaceTexture(m_playerCrazy);
+            const double s = 26.0;
+            face.scaled(s / face.height()).drawAt(c);
         }
 
         // クレイジーゲージ（敵）
@@ -281,27 +281,9 @@ void Game::draw() const
             Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
             const double angle = Math::TwoPiF * ratio;
             Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 1.0, 0.4, 0.4 });
-            const int pct = m_enemyCrazy;
-            const ColorF faceColor{ 1.0, 0.95, 0.6 };
-            Circle{ c, 12 }.draw(faceColor).drawFrame(1, 0, ColorF{ 0.1 });
-            Circle{ c + Vec2{ -4, -2 }, 1.5 }.draw(ColorF{ 0.1 });
-            Circle{ c + Vec2{  4, -2 }, 1.5 }.draw(ColorF{ 0.1 });
-            if (pct < 40)
-            {
-                Circle{ c + Vec2{ 0, 6 }, 6 }.drawArc(Math::Pi * 0.15, Math::Pi * 0.7, 1.5, 0, ColorF{ 0.1 });
-            }
-            else if (pct < 60)
-            {
-                Line{ c + Vec2{ -4, 3 }, c + Vec2{ 4, 3 } }.draw(1.5, ColorF{ 0.1 });
-            }
-            else if (pct < 80)
-            {
-                Line{ c + Vec2{ -4, 4 }, c + Vec2{ 4, 1 } }.draw(1.5, ColorF{ 0.1 });
-            }
-            else
-            {
-                Circle{ c + Vec2{ 0, 9 }, 6 }.drawArc(Math::Pi * 1.15, Math::Pi * 0.7, 1.5, 0, ColorF{ 0.1 });
-            }
+            const s3d::Texture& face = selectFaceTexture(m_enemyCrazy);
+            const double s = 26.0;
+            face.scaled(s / face.height()).drawAt(c);
         }
 
         // 左上の攻撃1〜4（背景色統一）

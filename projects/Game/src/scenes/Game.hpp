@@ -37,6 +37,12 @@ private:
 	int32 m_playerCrazy = 0;
 	int32 m_enemyCrazy = 0;
 
+    // 顔テクスチャ
+    s3d::Texture m_texSmile;
+    s3d::Texture m_texMagao;
+    s3d::Texture m_texCloudy;
+    s3d::Texture m_texCrying;
+
 	// 攻撃メッセージ＆入力待機
 	bool m_waitingForAcknowledge = false;
 	String m_battleMessage;
@@ -82,6 +88,7 @@ private:
 	// クレイジー関連
 	void addCrazy(bool targetIsEnemy, int32 delta);
 	static ColorF hpColor(int hp, int maxHP);
+    const s3d::Texture& selectFaceTexture(int crazyPercent) const;
 };
 
 
