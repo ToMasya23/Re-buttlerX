@@ -84,7 +84,7 @@ inline Vec2 EnemyCrazyCenter(const Size& sceneSize)
 }
 
 	// 左上：攻撃1〜4 ボタン
-	inline RoundRect AttackOptionButton(const Size& sceneSize, int index)
+	inline RoundRect AttackOptionButton([[maybe_unused]] const Size& sceneSize, int index)
 	{
 		const double x = AttackLeftMargin + AttackButtonSize.x * 0.5;
 		const double y = AttackTopMargin + (AttackButtonSize.y + AttackButtonGap) * index + AttackButtonSize.y * 0.5;

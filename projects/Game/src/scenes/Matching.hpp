@@ -1,6 +1,7 @@
 # pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../network/MultiplayerManager.hpp"
 
 // 待機（マッチング）シーン
 class Matching : public App::Scene
@@ -15,8 +16,21 @@ public:
 
 private:
 
-	RoundRect m_startButton{ Arg::center(400, 360), 300, 60, 8 };
-	RoundRect m_backButton{ Arg::center(400, 440), 300, 60, 8 };
+	// ===== オンライン対戦用 =====
+	std::shared_ptr<MultiplayerManager> m_multiplayer;
+	TextEditState m_ipInput;
+	RoundRect m_hostButton{ Arg::center(400, 240), 300, 60, 8 };
+	RoundRect m_joinButton{ Arg::center(400, 320), 300, 60, 8 };
+	Transition m_hostTr{ 0.4s, 0.2s };
+	Transition m_joinTr{ 0.4s, 0.2s };
+
+	enum class MatchState { SelectMode, Connecting, Connected };
+	MatchState m_matchState = MatchState::SelectMode;
+	String m_statusMessage;
+
+	// ===== 既存のボタン（ローカルモック用） =====
+	RoundRect m_startButton{ Arg::center(400, 400), 300, 60, 8 };
+	RoundRect m_backButton{ Arg::center(400, 480), 300, 60, 8 };
 
 	Transition m_startTr{ 0.4s, 0.2s };
 	Transition m_backTr{ 0.4s, 0.2s };

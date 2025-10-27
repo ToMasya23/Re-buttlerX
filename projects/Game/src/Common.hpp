@@ -16,6 +16,9 @@ enum class State
     EffectViewer,
 };
 
+// 前方宣言
+class MultiplayerManager;
+
 // 共有するデータ
 struct GameData
 {
@@ -32,6 +35,10 @@ struct GameData
 
     // 直前にプレイしたモード
     GameMode lastMode = GameMode::Unknown;
+
+    // ===== オンライン対戦用 =====
+    std::shared_ptr<MultiplayerManager> multiplayer;  // マルチプレイヤー管理
+    bool isHost = false;                               // ホストかどうか
 
 };
 

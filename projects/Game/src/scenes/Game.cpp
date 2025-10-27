@@ -1,4 +1,6 @@
 # include "Game.hpp"
+# include "../game/BattleTypes.hpp"
+
 namespace
 {
 	static constexpr int32 Damage1 = 10;
@@ -8,31 +10,31 @@ namespace
 Game::Game(const InitData& init)
 	: IScene{ init }
 {
-    // 顔テクスチャをロード（素材は assets/ui/faces/ 配下）
-    m_texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
-    m_texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
-    m_texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
-    m_texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+    // プレイヤー1とプレイヤー2の顔テクスチャをロード
+    m_player1.texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
+    m_player1.texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
+    m_player1.texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
+    m_player1.texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+
+    m_player2.texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
+    m_player2.texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
+    m_player2.texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
+    m_player2.texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+
+    // ===== オンライン対戦の初期化 =====
+    if (getData().multiplayer)
+    {
+        m_multiplayer = getData().multiplayer;
+        m_isOnlineMode = true;
+        m_isHost = getData().isHost;
+        m_isMyTurn = m_isHost;  // ホストが先攻
+    }
 }
 
-const s3d::Texture& Game::selectFaceTexture(int crazyPercent) const
+const s3d::Texture& Game::selectFaceTexture([[maybe_unused]] int crazyPercent) const
 {
-    if (crazyPercent < 40)
-    {
-        return m_texSmile; // 笑顔
-    }
-    else if (crazyPercent < 60)
-    {
-        return m_texMagao; // 真顔
-    }
-    else if (crazyPercent < 80)
-    {
-        return m_texCloudy; // 怪しい
-    }
-    else
-    {
-        return m_texCrying; // 泣き
-    }
+    // プレイヤー1の顔テクスチャを返す（後方互換性のため）
+    return m_player1.getCurrentFaceTexture();
 }
 
 void Game::update()
@@ -74,6 +76,13 @@ void Game::update()
         return;
     }
 
+    // ===== オンライン対戦のネットワーク処理 =====
+    if (m_isOnlineMode && m_multiplayer)
+    {
+        m_multiplayer->update();
+        handleNetworkMessages();
+    }
+
     // コスト回復（停止条件を考慮）
     if (!isRegenBlocked())
     {
@@ -81,7 +90,7 @@ void Game::update()
     }
 
     // 防御の継続時間チェック
-    if (m_defending && (m_defendTimer.sF() >= DefendDurationSec))
+    if (m_defending && (m_defendTimer.sF() >= BattleConstants::DefendDurationSec))
     {
         m_defending = false;
     }
@@ -94,7 +103,15 @@ void Game::update()
 			m_waitingForAcknowledge = false;
 			if (m_nextAction == NextAction::EnemyCounter)
 			{
-				doEnemyCounterStep();
+				// オンラインモードではローカルAI、オフラインでは既存処理
+				if (m_isOnlineMode)
+				{
+					doLocalEnemyCounter();
+				}
+				else
+				{
+					doEnemyCounterStep();
+				}
 			}
 			else if (m_nextAction == NextAction::FinishBattle)
 			{
@@ -106,6 +123,13 @@ void Game::update()
 			}
 			m_nextAction = NextAction::None;
 		}
+		return;
+	}
+
+	// ===== オンライン対戦のターンチェック =====
+	if (m_isOnlineMode && !m_isMyTurn)
+	{
+		// 相手のターンの場合は入力を受け付けない
 		return;
 	}
 
@@ -133,7 +157,20 @@ void Game::update()
     if (attackBtn1.leftClicked())
     {
         if (canAttack(U"攻撃1") && trySpendCost(10))
-            handlePlayerAttack(Damage1);
+        {
+            if (m_isOnlineMode)
+            {
+                sendPlayerAction(ActionType::Attack1);
+                m_isMyTurn = false;
+                m_battleMessage = U"攻撃を送信しました...";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+            else
+            {
+                handlePlayerAttack(Damage1);
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -144,7 +181,20 @@ void Game::update()
     else if (attackBtn2.leftClicked())
     {
         if (canAttack(U"攻撃2") && trySpendCost(10))
-            handlePlayerAttack(Damage2);
+        {
+            if (m_isOnlineMode)
+            {
+                sendPlayerAction(ActionType::Attack2);
+                m_isMyTurn = false;
+                m_battleMessage = U"攻撃を送信しました...";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+            else
+            {
+                handlePlayerAttack(Damage2);
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -155,7 +205,20 @@ void Game::update()
     else if (attackBtn3.leftClicked())
     {
         if (canAttack(U"攻撃3") && trySpendCost(10))
-            handlePlayerAttack(Damage1 + 5);
+        {
+            if (m_isOnlineMode)
+            {
+                sendPlayerAction(ActionType::Attack3);
+                m_isMyTurn = false;
+                m_battleMessage = U"攻撃を送信しました...";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+            else
+            {
+                handlePlayerAttack(Damage1 + 5);
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -166,7 +229,20 @@ void Game::update()
     else if (attackBtn4.leftClicked())
     {
         if (canAttack(U"攻撃4") && trySpendCost(10))
-            handlePlayerAttack(Damage2 + 10);
+        {
+            if (m_isOnlineMode)
+            {
+                sendPlayerAction(ActionType::Attack4);
+                m_isMyTurn = false;
+                m_battleMessage = U"攻撃を送信しました...";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+            else
+            {
+                handlePlayerAttack(Damage2 + 10);
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -176,11 +252,22 @@ void Game::update()
     }
     else if (escapeBtn.leftClicked())
     {
-        // 敗北として終了（メッセージ表示）
-        m_playerHP = 0;
-        m_battleMessage = U"プレイヤーは逃げ出した！";
-        m_waitingForAcknowledge = true;
-        m_nextAction = NextAction::FinishBattle;
+        if (m_isOnlineMode)
+        {
+            sendPlayerAction(ActionType::Escape);
+            m_isMyTurn = false;
+            m_playerHP = 0;
+            m_battleMessage = U"プレイヤーは逃げ出した！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::FinishBattle;
+        }
+        else
+        {
+            m_playerHP = 0;
+            m_battleMessage = U"プレイヤーは逃げ出した！";
+            m_waitingForAcknowledge = true;
+            m_nextAction = NextAction::FinishBattle;
+        }
     }
     else if (defendBtn.leftClicked())
     {
@@ -188,6 +275,13 @@ void Game::update()
         {
             m_defending = true;
             m_defendTimer.restart();
+
+            if (m_isOnlineMode)
+            {
+                sendPlayerAction(ActionType::Defend);
+                m_isMyTurn = false;
+            }
+
             m_battleMessage = U"防御体勢に入った！";
             m_waitingForAcknowledge = true;
             m_nextAction = NextAction::BackToSelection;
@@ -429,7 +523,7 @@ bool Game::advanceInputDown() const
 
 void Game::regenCost(double dt)
 {
-	m_costValue = Min(100.0, m_costValue + (CostRegenPerSec * dt));
+	m_costValue = s3d::Min(100.0, m_costValue + (BattleConstants::CostRegenPerSec * dt));
 }
 
 int32 Game::calcAttackCost(const String& label) const
@@ -491,6 +585,220 @@ ColorF Game::hpColor(int hp, int maxHP)
 	else
 	{
 		return ColorF{ 0.9, 0.3, 0.3 }; // 赤
+	}
+}
+
+// ===== オンライン対戦用ヘルパーメソッド =====
+
+void Game::handleNetworkMessages()
+{
+	if (!m_multiplayer)
+		return;
+
+	while (auto msgType = m_multiplayer->peekMessageType())
+	{
+		switch (*msgType)
+		{
+		case MessageType::PlayerAction:
+		{
+			auto msg = m_multiplayer->receive<PlayerActionMessage>();
+			if (msg)
+			{
+				handleOpponentAction(*msg);
+			}
+			break;
+		}
+		case MessageType::GameStateSync:
+		{
+			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
+			if (msg)
+			{
+				syncGameState(*msg);
+			}
+			break;
+		}
+		case MessageType::TurnChange:
+		{
+			auto msg = m_multiplayer->receive<TurnChangeMessage>();
+			if (msg)
+			{
+				m_isMyTurn = m_isHost ? msg->isHostTurn : !msg->isHostTurn;
+				m_turnNumber = msg->turnNumber;
+			}
+			break;
+		}
+		case MessageType::BattleMessage:
+		{
+			auto msg = m_multiplayer->receive<BattleTextMessage>();
+			if (msg)
+			{
+				m_battleMessage = msg->message;
+				m_waitingForAcknowledge = true;
+			}
+			break;
+		}
+		case MessageType::BattleEnd:
+		{
+			auto msg = m_multiplayer->receive<BattleEndMessage>();
+			if (msg)
+			{
+				finishBattleIfNeeded();
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
+}
+
+void Game::sendPlayerAction(ActionType action)
+{
+	if (!m_multiplayer)
+		return;
+
+	PlayerActionMessage msg;
+	msg.action = action;
+	msg.turnNumber = m_turnNumber;
+	m_multiplayer->send<PlayerActionMessage>(msg);
+}
+
+void Game::handleOpponentAction(const PlayerActionMessage& msg)
+{
+	const int32 damage = calculateDamage(msg.action);
+
+	if (msg.action == ActionType::Defend)
+	{
+		m_player2.defending = true;
+		m_player2.defendTimer.restart();
+		sendGameStateSync();
+	}
+	else if (msg.action == ActionType::Escape)
+	{
+		m_enemyHP = 0;
+		m_battleMessage = U"相手は逃げ出した！";
+		m_waitingForAcknowledge = true;
+		m_nextAction = NextAction::FinishBattle;
+		sendGameStateSync();
+	}
+	else
+	{
+		int32 finalDamage = damage;
+		if (m_defending)
+		{
+			finalDamage = 0;
+		}
+		m_playerHP = Max(0, m_playerHP - finalDamage);
+		addCrazy(false, +20);
+		startHitEffect(HitTarget::Player);
+
+		m_battleMessage = (finalDamage == 0)
+			? U"相手は攻撃したが、防御した！0のダメージ！"
+			: U"相手はプレイヤーに攻撃した！{}のダメージを与えた！"_fmt(finalDamage);
+		m_waitingForAcknowledge = true;
+
+		if (m_playerHP <= 0)
+		{
+			m_nextAction = NextAction::FinishBattle;
+		}
+		else
+		{
+			m_nextAction = NextAction::BackToSelection;
+			m_isMyTurn = true;
+		}
+
+		sendGameStateSync();
+	}
+}
+
+void Game::sendGameStateSync()
+{
+	if (!m_multiplayer)
+		return;
+
+	GameStateSyncMessage msg;
+	msg.type = MessageType::GameStateSync;
+
+	// 現在の状態をメッセージに格納
+	if (m_isHost)
+	{
+		// ホストの場合：自分がhost、相手がclient
+		msg.hostHP = m_playerHP;
+		msg.hostCost = m_costValue;
+		msg.hostDefending = m_defending;
+		msg.hostDefendTime = m_defendTimer.sF();
+		msg.hostCrazy = m_player1.crazyGauge;
+
+		msg.clientHP = m_enemyHP;
+		msg.clientCost = m_player2.costValue;
+		msg.clientDefending = m_player2.defending;
+		msg.clientDefendTime = m_player2.defendTimer.sF();
+		msg.clientCrazy = m_player2.crazyGauge;
+	}
+	else
+	{
+		// クライアントの場合：自分がclient、相手がhost
+		msg.hostHP = m_enemyHP;
+		msg.hostCost = m_player2.costValue;
+		msg.hostDefending = m_player2.defending;
+		msg.hostDefendTime = m_player2.defendTimer.sF();
+		msg.hostCrazy = m_player2.crazyGauge;
+
+		msg.clientHP = m_playerHP;
+		msg.clientCost = m_costValue;
+		msg.clientDefending = m_defending;
+		msg.clientDefendTime = m_defendTimer.sF();
+		msg.clientCrazy = m_player1.crazyGauge;
+	}
+
+	msg.isHostTurn = m_isHost ? m_isMyTurn : !m_isMyTurn;
+	msg.turnNumber = m_turnNumber;
+
+	m_multiplayer->send<GameStateSyncMessage>(msg);
+}
+
+void Game::syncGameState(const GameStateSyncMessage& msg)
+{
+	// 相手（enemy）の状態だけを更新し、自分の状態は更新しない
+	if (m_isHost)
+	{
+		// ホストの場合：相手がclientなので、client側の情報だけを更新
+		m_enemyHP = msg.clientHP;
+		m_player2.costValue = msg.clientCost;
+		m_player2.defending = msg.clientDefending;
+		m_player2.crazyGauge = msg.clientCrazy;
+	}
+	else
+	{
+		// クライアントの場合：相手がhostなので、host側の情報だけを更新
+		m_enemyHP = msg.hostHP;
+		m_player2.costValue = msg.hostCost;
+		m_player2.defending = msg.hostDefending;
+		m_player2.crazyGauge = msg.hostCrazy;
+	}
+	m_turnNumber = msg.turnNumber;
+}
+
+void Game::doLocalEnemyCounter()
+{
+	// オンラインモードでは相手の行動を待つだけ（AIは動かない）
+	// このメソッドはPvEモード専用なので、オンラインでは何もしない
+}
+
+int32 Game::calculateDamage(ActionType action) const
+{
+	switch (action)
+	{
+	case ActionType::Attack1:
+		return DamageValues::Attack1;
+	case ActionType::Attack2:
+		return DamageValues::Attack2;
+	case ActionType::Attack3:
+		return DamageValues::Attack3;
+	case ActionType::Attack4:
+		return DamageValues::Attack4;
+	default:
+		return 0;
 	}
 }
 
