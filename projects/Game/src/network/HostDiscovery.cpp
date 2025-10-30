@@ -96,19 +96,38 @@ void HostDiscovery::generateScanTargets()
 	}
 	else
 	{
-		// 検出したローカルIPと同じサブネットをスキャン
+		// 検出したローカルIPのクラスBサブネット全体をスキャン
 		const auto& ipData = localIP.getData();
 		uint8 a = ipData[0];
 		uint8 b = ipData[1];
 		uint8 c = ipData[2];
 		
 		Console << U"[HostDiscovery] ローカルIP検出: " << (int)a << U"." << (int)b << U"." << (int)c << U".X";
-		Console << U"[HostDiscovery] 同じサブネット（" << (int)a << U"." << (int)b << U"." << (int)c << U".1-50）をスキャンします";
 		
-		// 同じサブネットの1-50をスキャン
+		// 150.65.x.x のような大学/企業ネットワークの場合、複数のサブネットをスキャン
+		// 自分のサブネット + 隣接するサブネット（±5）をスキャン
+		Console << U"[HostDiscovery] サブネット " << (int)a << U"." << (int)b << U"." << (int)c << U".1-50";
+		Console << U"[HostDiscovery] および隣接サブネット（±5）をスキャンします";
+		
+		// 自分のサブネット
 		for (uint16 i = 1; i <= 50; ++i)
 		{
 			m_scanTargets.emplace_back(a, b, c, static_cast<uint8>(i));
+		}
+		
+		// 隣接する10個のサブネット（c-5 から c+5）を各10個ずつスキャン
+		for (int offset = -5; offset <= 5; ++offset)
+		{
+			if (offset == 0) continue;  // 自分のサブネットはすでに追加済み
+			
+			int newC = static_cast<int>(c) + offset;
+			if (newC < 0 || newC > 255) continue;
+			
+			// 各サブネットの最初の10個をスキャン
+			for (uint16 i = 1; i <= 10; ++i)
+			{
+				m_scanTargets.emplace_back(a, b, static_cast<uint8>(newC), static_cast<uint8>(i));
+			}
 		}
 	}
 	
