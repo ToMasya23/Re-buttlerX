@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
 # include "../ui/PauseMenu.hpp"
@@ -42,6 +42,12 @@ private:
     s3d::Texture m_texMagao;
     s3d::Texture m_texCloudy;
     s3d::Texture m_texCrying;
+
+	s3d::Texture m_texPlayer;
+	s3d::Texture m_texEnemy;
+
+	s3d::Texture m_texDfend_on;
+	s3d::Texture m_texDfend_off;
 
 	// 攻撃メッセージ＆入力待機
 	bool m_waitingForAcknowledge = false;

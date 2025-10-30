@@ -1,18 +1,54 @@
-# include "Game.hpp"
+﻿# include "Game.hpp"
+# include "../tools/NineSlice.hpp"
 namespace
 {
 	static constexpr int32 Damage1 = 10;
 	static constexpr int32 Damage2 = 20;
+
+	NineSliceSkin& ScreenFrame() {
+		static NineSliceSkin skin{
+			U"assets/ui/frames/battle_frame.png",
+			20, 20, 20, 20,   // left, right, top, bottom（像素）
+			false             // 中心不画，只画边
+		};
+		return skin;
+	}
+
+	NineSliceSkin& BaseFrame() {
+		static NineSliceSkin skin{
+			U"assets/ui/frames/battle_base.png",
+			20, 20, 20, 20,   // left, right, top, bottom（像素）
+			false             // center不绘制
+		};
+		return skin;
+	}
+
+	inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
+	{
+		const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+		const double sx = dst.w / tex.width();
+		const double sy = dst.h / tex.height();
+		const double s = s3d::Min(sx, sy);
+		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } *s;
+		const s3d::Vec2 pos = dst.center() - size * 0.5;
+		tex.scaled(s).draw(pos, tint);
+	}
 }
 
 Game::Game(const InitData& init)
 	: IScene{ init }
 {
     // 顔テクスチャをロード（素材は assets/ui/faces/ 配下）
-    m_texSmile = s3d::Texture{ U"assets/ui/faces/smile.png" };
-    m_texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
-    m_texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
-    m_texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+    m_texSmile = s3d::Texture{ U"assets/ui/faces/笑顔CG一.png" };
+    m_texMagao = s3d::Texture{ U"assets/ui/faces/真顔CG二.png" };
+    m_texCloudy = s3d::Texture{ U"assets/ui/faces/怪しめCG三.png" };
+    m_texCrying = s3d::Texture{ U"assets/ui/faces/泣きCG四.png" };
+
+	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
+	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
+
+	m_texDfend_on = s3d::Texture{ U"assets/ui/defend_on.png", s3d::TextureDesc::Unmipped };
+	m_texDfend_off = s3d::Texture{ U"assets/ui/defend_off.png",  s3d::TextureDesc::Unmipped };
 }
 
 const s3d::Texture& Game::selectFaceTexture(int crazyPercent) const
@@ -230,7 +266,7 @@ void Game::draw() const
 
 	{
 		const ScopedRenderTarget2D rt{ m_sceneRT };
-		m_sceneRT.clear(ColorF{ 0.18, 0.2, 0.24 });
+		m_sceneRT.clear(ColorF{ 1.0 });
 
 		// キャラ矩形
 		{
@@ -239,10 +275,30 @@ void Game::draw() const
 			const bool hitPlayer = (m_hitTarget == HitTarget::Player) && (t < HitDuration);
 			const bool hitEnemy  = (m_hitTarget == HitTarget::Enemy)  && (t < HitDuration);
 			const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
-			const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 0.3, 0.7, 0.9 };
-			const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 0.9, 0.4, 0.4 };
-			RectF(playerPos, entitySize).rounded(6).draw(playerColor);
-			RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+			const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
+			const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
+			//RectF(playerPos, entitySize).rounded(6).draw(playerColor);
+			//RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+
+			// 保持像素风（最近邻）
+			const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+
+			auto drawFit = [](const Texture& tex, const RectF& dst, const ColorF& col = Palette::White)
+				{
+					const ScopedRenderStates2D _nn{ SamplerState::ClampNearest }; // 像素风更清晰
+					const double sx = dst.w / tex.width();
+					const double sy = dst.h / tex.height();
+					const double s = Min(sx, sy);                 // 关键：取较小值
+					const Vec2   size = Vec2{ tex.width(), tex.height() } *s;
+					const Vec2   pos = dst.center() - size * 0.5; // 居中
+					tex.scaled(s).draw(pos, col);
+				};
+
+			// 依据目标尺寸拉伸到和原来矩形一样大（以左上角 playerPos / enemyPos 为基准）
+			const RectF pRect{ playerPos, BattleLayout::EntitySize };
+			const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
+			drawFit(m_texPlayer, pRect, playerColor);
+			drawFit(m_texEnemy, eRect, enemyColor);
 		}
 
 		const Font& bold = FontAsset(U"Bold");
@@ -252,14 +308,14 @@ void Game::draw() const
         const ColorF playerHPColor = hpColor(m_playerHP, MaxHP);
         playerHPBar.draw(ColorF{ 0.2 });
         RectF{ playerHPBar.x, playerHPBar.y, static_cast<double>(playerHPWidth), BattleLayout::HPBarHeight }.draw(playerHPColor);
-        bold(U"HP {}/{}"_fmt(m_playerHP, MaxHP)).draw(16, BattleLayout::PlayerHPLabelPos(sceneSize), ColorF{ 0.95 });
+        bold(U"HP {}/{}"_fmt(m_playerHP, MaxHP)).draw(16, BattleLayout::PlayerHPLabelPos(sceneSize), ColorF{ Palette::Pink });
 
         // HPバー（敵・頭上）
         const RectF enemyHPBar = BattleLayout::EnemyHPBarBG(sceneSize);
         const ColorF enemyHPColor = hpColor(m_enemyHP, MaxHP);
         enemyHPBar.draw(ColorF{ 0.2 });
         RectF{ enemyHPBar.x, enemyHPBar.y, static_cast<double>(enemyHPWidth), BattleLayout::HPBarHeight }.draw(enemyHPColor);
-        bold(U"HP {}/{}"_fmt(m_enemyHP, MaxHP)).draw(16, BattleLayout::EnemyHPLabelPos(sceneSize), ColorF{ 0.95 });
+        bold(U"HP {}/{}"_fmt(m_enemyHP, MaxHP)).draw(16, BattleLayout::EnemyHPLabelPos(sceneSize), ColorF{ Palette::Pink });
 
         // クレイジーゲージ（プレイヤー）
         {
@@ -293,22 +349,26 @@ void Game::draw() const
         const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
         const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
         const ColorF actionBg{ 1.0 };
-        attackBtn1.draw(actionBg).drawFrame(2);
-        attackBtn2.draw(actionBg).drawFrame(2);
-        attackBtn3.draw(actionBg).drawFrame(2);
-        attackBtn4.draw(actionBg).drawFrame(2);
+		attackBtn1.rect.draw(actionBg); BaseFrame().draw(attackBtn1.rect);
+		attackBtn2.rect.draw(actionBg); BaseFrame().draw(attackBtn2.rect);
+		attackBtn3.rect.draw(actionBg); BaseFrame().draw(attackBtn3.rect);
+		attackBtn4.rect.draw(actionBg); BaseFrame().draw(attackBtn4.rect);
         bold(U"攻撃1").drawAt(24, attackBtn1.center(), ColorF{ 0.1 });
         bold(U"攻撃2").drawAt(24, attackBtn2.center(), ColorF{ 0.1 });
         bold(U"攻撃3").drawAt(24, attackBtn3.center(), ColorF{ 0.1 });
         bold(U"攻撃4").drawAt(24, attackBtn4.center(), ColorF{ 0.1 });
         // 逃げる（右端）
-        escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }).drawFrame(2);
+		escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }); BaseFrame().draw(escapeBtn.rect);
         bold(U"逃げる").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
 
         // 左上：コストボックス
         const RectF costPanel = BattleLayout::CostPanelRect(sceneSize);
-        const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
-        costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+        //const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
+        //costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+
+		costPanel.draw(ColorF{ 1.0, 0.95 });
+		BaseFrame().draw(costPanel);
+
         const int32 cost = this->cost();
         const double w = costPanel.w - 24;
         const RectF barBG{ costPanel.x + 12, costPanel.y + costPanel.h - 22, w, 10 };
@@ -321,11 +381,28 @@ void Game::draw() const
         // 左下プレイヤーパネル
         const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
         const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
-        panelRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+		panelRR.draw(ColorF{ 1.0, 0.95 }); BaseFrame().draw(panelRR.rect);
         BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
-        const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
-        defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
-        bold(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+        //const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+        //defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
+        //bold(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+
+		const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+
+		// （可选）简单底色，保留即可；不要九宫格
+		defendBtn.rect.draw(s3d::ColorF{ 1.0 });
+
+		// hover 小高亮（可选）
+		if (defendBtn.mouseOver()) {
+			defendBtn.rect.draw(s3d::ColorF{ 1.0, 0.06 });
+		}
+
+		// 根据状态选择贴图并绘制
+		const s3d::Texture& tex = (m_defending ? m_texDfend_on : m_texDfend_off);
+		drawFit(tex, defendBtn.rect);
+
+		const RectF dRect{ playerPos, BattleLayout::EntitySize };
+
 
 		// メッセージウィンドウ
 		if (m_waitingForAcknowledge)
@@ -354,6 +431,7 @@ void Game::draw() const
 		m_sceneRT.draw();
 		Cursor::RequestStyle(CursorStyle::Default);
 	}
+	ScreenFrame().draw(s3d::RectF{ 0, 0, (double)Scene::Width(), (double)Scene::Height() });
 }
 
 void Game::handlePlayerAttack(int32 damage)
