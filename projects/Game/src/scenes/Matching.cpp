@@ -180,9 +180,29 @@ void Matching::update()
 	// ホストリスト表示中（手動IP入力に変更）
 	if (m_viewMode == ViewMode::HostList)
 	{
-		// IP入力ボックスの更新
-		const Rect ipInputBox{ Arg::center(400, 250), 400, 40 };
-		SimpleGUI::TextBox(m_ipInputState, Vec2{ ipInputBox.x, ipInputBox.y }, ipInputBox.w);
+		// テキスト入力の処理
+		m_ipInputState.active = true;
+		
+		// TextInputからの入力を取得
+		const String input = TextInput::GetRawInput();
+		
+		// 数字とドットのみを追加
+		for (size_t i = 0; i < input.length(); ++i)
+		{
+			const char32 ch = input[i];
+			if ((ch >= U'0' && ch <= U'9') || ch == U'.')
+			{
+				m_ipInputState.text += ch;
+				m_ipInputState.cursorPos++;
+			}
+		}
+		
+		// バックスペース
+		if (KeyBackspace.down() && m_ipInputState.cursorPos > 0)
+		{
+			m_ipInputState.text.pop_back();
+			m_ipInputState.cursorPos--;
+		}
 		
 		// 接続ボタン
 		const s3d::RoundRect connectButton{ Arg::center(400, 320), 200, 50, 8 };
@@ -193,7 +213,8 @@ void Matching::update()
 			Cursor::RequestStyle(CursorStyle::Hand);
 		}
 		
-		if (connectButton.leftClicked())
+		// Enterキーでも接続
+		if (connectButton.leftClicked() || KeyEnter.down())
 		{
 			// 入力されたIPアドレスをパース
 			String ipText = m_ipInputState.text;
@@ -362,8 +383,25 @@ void Matching::draw() const
 			bold(U"ホストのIPアドレスを入力してください:").drawAt(24, Vec2{ 400, 180 }, ColorF{ 0.8 });
 			bold(U"(例: 192.168.1.100)").drawAt(20, Vec2{ 400, 210 }, ColorF{ 0.5 });
 			
+			// IP入力ボックスを目立つように描画
+			const s3d::RoundRect inputBox{ Arg::center(400, 260), 400, 50, 8 };
+			inputBox.draw(ColorF{ 0.1, 0.1, 0.15 }).drawFrame(3, ColorF{ 0.3, 0.6, 1.0 });
+			
+			// 入力中のテキストを表示
+			const String displayText = m_ipInputState.text.isEmpty() ? U"IPアドレスを入力..." : m_ipInputState.text;
+			const ColorF textColor = m_ipInputState.text.isEmpty() ? ColorF{ 0.4 } : ColorF{ 1.0 };
+			bold(displayText).drawAt(28, inputBox.center(), textColor);
+			
+			// カーソルを点滅表示
+			if (m_ipInputState.active && static_cast<int32>(Scene::Time() * 2) % 2 == 0)
+			{
+				const double textWidth = bold(m_ipInputState.text.substr(0, m_ipInputState.cursorPos)).region(28).w;
+				const double cursorX = inputBox.center().x - bold(m_ipInputState.text).region(28).w / 2 + textWidth;
+				Line{ cursorX, inputBox.center().y - 14, cursorX, inputBox.center().y + 14 }.draw(2, ColorF{ 1.0 });
+			}
+			
 			// 接続ボタン
-			const s3d::RoundRect connectButton{ Arg::center(400, 320), 200, 50, 8 };
+			const s3d::RoundRect connectButton{ Arg::center(400, 340), 200, 50, 8 };
 			bool connectHover = connectButton.mouseOver();
 			connectButton.draw(ColorF{ connectHover ? 0.7 : 0.5 }).drawFrame(2, ColorF{ connectHover ? 1.0 : 0.7 });
 			bold(U"接続").drawAt(28, connectButton.center(), ColorF{ 0.1 });
