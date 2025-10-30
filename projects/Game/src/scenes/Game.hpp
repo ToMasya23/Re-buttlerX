@@ -24,6 +24,10 @@ private:
     FaceTextures m_faces;
     CardDeck m_deck;
 
+	// ---- キャラクタ表示用テクスチャ ----
+	s3d::Texture m_texPlayer;
+	s3d::Texture m_texEnemy;
+
 	// ---- ポーズ用 ----
 	bool m_paused = false;
 	RenderTexture m_sceneRT;

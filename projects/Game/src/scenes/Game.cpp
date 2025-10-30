@@ -46,6 +46,10 @@ Game::Game(const InitData& init)
     {
         m_deck.refillRandom(4);
     }
+
+	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
+	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
+	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
 }
 
 void Game::update()
@@ -335,8 +339,10 @@ void Game::draw() const
 			const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
             const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
             const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
-            RectF(playerPos, entitySize).rounded(6).draw(playerColor);
-            RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+			const RectF pRect{ playerPos, BattleLayout::EntitySize };
+			const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
+			drawFit(m_texPlayer, pRect, playerColor);
+			drawFit(m_texEnemy,  eRect,  enemyColor);
 		}
 
 		const Font& bold = FontAsset(U"Bold");
