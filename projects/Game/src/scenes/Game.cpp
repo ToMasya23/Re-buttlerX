@@ -1,6 +1,41 @@
 # include "Game.hpp"
 # include "../game/BattleLogic.hpp"
 # include "../game/BattleUtils.hpp"
+# include "../tools/NineSlice.hpp"
+namespace
+{
+	static constexpr int32 Damage1 = 10;
+	static constexpr int32 Damage2 = 20;
+
+	NineSliceSkin& ScreenFrame() {
+		static NineSliceSkin skin{
+			U"assets/ui/frames/battle_frame.png",
+			20, 20, 20, 20,
+			false
+		};
+		return skin;
+	}
+
+	NineSliceSkin& BaseFrame() {
+		static NineSliceSkin skin{
+			U"assets/ui/frames/battle_base.png",
+			20, 20, 20, 20,
+			false
+		};
+		return skin;
+	}
+
+	inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
+	{
+		const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+		const double sx = dst.w / tex.width();
+		const double sy = dst.h / tex.height();
+		const double s = s3d::Min(sx, sy);
+		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } *s;
+		const s3d::Vec2 pos = dst.center() - size * 0.5;
+		tex.scaled(s).draw(pos, tint);
+	}
+}
 
 Game::Game(const InitData& init)
     : IScene{ init }
@@ -289,7 +324,7 @@ void Game::draw() const
 
 	{
 		const ScopedRenderTarget2D rt{ m_sceneRT };
-		m_sceneRT.clear(ColorF{ 0.18, 0.2, 0.24 });
+		m_sceneRT.clear(ColorF{ 1.0 });
 
         // キャラ矩形
 		{
@@ -298,10 +333,10 @@ void Game::draw() const
             const bool hitPlayer = (m_state.hitTarget == BattleState::HitTarget::Player) && (t < BattleState::HitDuration);
             const bool hitEnemy  = (m_state.hitTarget == BattleState::HitTarget::Enemy)  && (t < BattleState::HitDuration);
 			const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
-			const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 0.3, 0.7, 0.9 };
-			const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 0.9, 0.4, 0.4 };
-			RectF(playerPos, entitySize).rounded(6).draw(playerColor);
-			RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+            const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
+            const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
+            RectF(playerPos, entitySize).rounded(6).draw(playerColor);
+            RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
 		}
 
 		const Font& bold = FontAsset(U"Bold");
@@ -381,8 +416,9 @@ void Game::draw() const
         drawSlot(attackBtn2, 1);
         drawSlot(attackBtn3, 2);
         drawSlot(attackBtn4, 3);
+        
         // 逃げる（右端）
-        escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }).drawFrame(2);
+		escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }); BaseFrame().draw(escapeBtn.rect);
         bold(U"逃げる").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
 
         // 左上：コストボックス
@@ -390,6 +426,7 @@ void Game::draw() const
         const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
         costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
         const int32 cost = m_state.cost();
+        
         const double w = costPanel.w - 24;
         const RectF barBG{ costPanel.x + 12, costPanel.y + costPanel.h - 22, w, 10 };
         const RectF barFG{ barBG.x, barBG.y, w * (cost / 100.0), barBG.h };
@@ -403,11 +440,12 @@ void Game::draw() const
         // 左下プレイヤーパネル
         const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
         const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
-        panelRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+		panelRR.draw(ColorF{ 1.0, 0.95 }); BaseFrame().draw(panelRR.rect);
         BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
         const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
         defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
         bold(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+
 
 		// メッセージウィンドウ
         if (m_state.waitingForAcknowledge)
@@ -436,6 +474,7 @@ void Game::draw() const
 		m_sceneRT.draw();
 		Cursor::RequestStyle(CursorStyle::Default);
 	}
+	ScreenFrame().draw(s3d::RectF{ 0, 0, (double)Scene::Width(), (double)Scene::Height() });
 }
 void Game::finishBattleIfNeeded()
 {

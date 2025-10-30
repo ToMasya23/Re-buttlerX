@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
 # include "../ui/PauseMenu.hpp"

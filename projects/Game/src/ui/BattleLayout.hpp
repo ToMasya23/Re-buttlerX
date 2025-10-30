@@ -1,10 +1,10 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 
 namespace BattleLayout
 {
 	// エンティティ（キャラ）サイズ
-	inline constexpr Size EntitySize{ 80, 80 };
+	inline constexpr Size EntitySize{ 100, 200 };
 
 	// HP バーサイズ（頭上配置）
 	inline constexpr double HPBarWidth = 240.0;
