@@ -6,18 +6,28 @@ MultiplayerManager::MultiplayerManager()
 
 bool MultiplayerManager::startHost(uint16 port)
 {
+	Console << U"[MultiplayerManager] ポート" << port << U"で接続待機開始";
 	m_server.startAccept(port);
 	m_role = Role::Host;
+	Console << U"[ホスト] 接続待機中...";
+	Console << U"[ホスト] 自分のIPアドレスを相手に伝えてください";
+	Console << U"[ホスト] コマンドプロンプトで 'ipconfig' を実行して確認できます";
+	
 	return true;
 }
 
-bool MultiplayerManager::connect(const s3d::IPv4Address& address)
+bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port)
 {
-	if (m_client.connect(address, 12345))
+	Console << U"[MultiplayerManager] 接続試行 port=" << port;
+	
+	if (m_client.connect(address, port))
 	{
 		m_role = Role::Client;
+		Console << U"[MultiplayerManager] 接続成功";
 		return true;
 	}
+	
+	Console << U"[MultiplayerManager] 接続失敗";
 	return false;
 }
 

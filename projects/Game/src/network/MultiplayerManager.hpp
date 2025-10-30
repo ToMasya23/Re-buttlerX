@@ -17,7 +17,7 @@ public:
 
 	// 接続管理
 	bool startHost(uint16 port = 12345);
-	bool connect(const s3d::IPv4Address& address);
+	bool connect(const s3d::IPv4Address& address, uint16 port = 12345);
 	void disconnect();
 	bool isConnected() const;
 	Role getRole() const { return m_role; }
