@@ -628,6 +628,8 @@ void Game::handleNetworkMessages()
 				// 相手の攻撃を受信（damageフィールドを使用）
 				int32 damage = msg->damage;
 				
+				Print << U"[PlayerAction受信] damage=" << damage << U" 現在のplayerHP=" << m_state.playerHP;
+				
 				if (damage > 0)
 				{
 					// 防御中なら半減
@@ -644,6 +646,8 @@ void Game::handleNetworkMessages()
 					m_state.playerHP -= damage;
 					m_state.hitTarget = BattleState::HitTarget::Player;
 					m_state.hitTimer.restart();
+					
+					Print << U"[ダメージ適用後] playerHP=" << m_state.playerHP;
 					
 					// 被ダメージ後、自分の状態を同期
 					sendGameStateSync();
@@ -669,6 +673,12 @@ void Game::handleNetworkMessages()
 			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
 			if (msg)
 			{
+				// デバッグ出力
+				Print << U"[GameStateSync受信] isHost=" << m_isHost 
+					  << U" hostHP=" << msg->hostHP 
+					  << U" clientHP=" << msg->clientHP
+					  << U" 現在のenemyHP=" << m_state.enemyHP;
+				
 				// 相手（enemy）の状態だけを更新し、自分の状態は更新しない
 				// add_networkブランチと同じ実装
 				if (m_isHost)
@@ -676,12 +686,14 @@ void Game::handleNetworkMessages()
 					// ホストの場合：相手がclientなので、client側の情報だけを更新
 					m_state.enemyHP = msg->clientHP;
 					m_state.enemyCrazy = msg->clientCrazy;
+					Print << U"[ホスト] enemyHPを更新: " << m_state.enemyHP;
 				}
 				else
 				{
 					// クライアントの場合：相手がhostなので、host側の情報だけを更新
 					m_state.enemyHP = msg->hostHP;
 					m_state.enemyCrazy = msg->hostCrazy;
+					Print << U"[クライアント] enemyHPを更新: " << m_state.enemyHP;
 				}
 				m_turnNumber = msg->turnNumber;
 			}
@@ -740,6 +752,8 @@ void Game::sendGameStateSync()
 		msg.clientDefending = false;
 		msg.clientDefendTime = 0;
 		msg.clientCrazy = m_state.enemyCrazy;
+		
+		Print << U"[ホスト送信] playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
 	}
 	else
 	{
@@ -755,6 +769,8 @@ void Game::sendGameStateSync()
 		msg.clientDefending = m_state.defending;
 		msg.clientDefendTime = m_state.defendTimer.sF();
 		msg.clientCrazy = m_state.playerCrazy;
+		
+		Print << U"[クライアント送信] playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
 	}
 
 	msg.isHostTurn = m_isHost ? m_isMyTurn : !m_isMyTurn;

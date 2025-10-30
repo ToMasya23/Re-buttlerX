@@ -150,6 +150,13 @@ void MultiplayerManager::send<PlayerActionMessage>(const PlayerActionMessage& me
 	data.push_back(static_cast<uint8>(message.type));
 	data.push_back(static_cast<uint8>(message.action));
 
+	// damageフィールドを追加（int32 = 4 bytes）
+	int32 damage = message.damage;
+	data.push_back((damage >> 0) & 0xFF);
+	data.push_back((damage >> 8) & 0xFF);
+	data.push_back((damage >> 16) & 0xFF);
+	data.push_back((damage >> 24) & 0xFF);
+
 	uint32 turnNum = message.turnNumber;
 	data.push_back((turnNum >> 0) & 0xFF);
 	data.push_back((turnNum >> 8) & 0xFF);
@@ -179,7 +186,7 @@ s3d::Optional<PlayerActionMessage> MultiplayerManager::receive<PlayerActionMessa
 	auto blob = m_receiveQueue.front();
 	m_receiveQueue.pop_front();
 
-	if (blob.size() < 6)
+	if (blob.size() < 10)  // type(1) + action(1) + damage(4) + turnNumber(4) = 10 bytes
 		return s3d::none;
 
 	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
@@ -187,10 +194,17 @@ s3d::Optional<PlayerActionMessage> MultiplayerManager::receive<PlayerActionMessa
 	PlayerActionMessage message;
 	message.type = static_cast<MessageType>(data[0]);
 	message.action = static_cast<ActionType>(data[1]);
-	message.turnNumber = (static_cast<uint32>(data[2]) << 0) |
-		(static_cast<uint32>(data[3]) << 8) |
-		(static_cast<uint32>(data[4]) << 16) |
-		(static_cast<uint32>(data[5]) << 24);
+	
+	// damageフィールドを読み取り
+	message.damage = (static_cast<int32>(data[2]) << 0) |
+		(static_cast<int32>(data[3]) << 8) |
+		(static_cast<int32>(data[4]) << 16) |
+		(static_cast<int32>(data[5]) << 24);
+	
+	message.turnNumber = (static_cast<uint32>(data[6]) << 0) |
+		(static_cast<uint32>(data[7]) << 8) |
+		(static_cast<uint32>(data[8]) << 16) |
+		(static_cast<uint32>(data[9]) << 24);
 
 	return message;
 }
