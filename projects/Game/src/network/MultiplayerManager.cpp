@@ -63,6 +63,7 @@ void MultiplayerManager::update()
 			if (!sessions.isEmpty())
 			{
 				m_sessionID = sessions.front();
+				Console << U"[MultiplayerManager] クライアントからの接続を受け入れました！";
 			}
 		}
 	}

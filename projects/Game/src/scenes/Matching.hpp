@@ -25,6 +25,9 @@ private:
 	};
 
 	ViewMode m_viewMode = ViewMode::Menu;
+	
+	// ヘルパー関数
+	IPv4Address detectLocalIPForDisplay();
 
 	RoundRect m_hostButton{ Arg::center(400, 280), 300, 60, 8 };
 	RoundRect m_joinButton{ Arg::center(400, 360), 300, 60, 8 };

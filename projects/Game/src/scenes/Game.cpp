@@ -55,12 +55,15 @@ Game::Game(const InitData& init)
 	// ===== オンライン対戦の初期化 =====
 	if (getData().multiplayer)
 	{
+		Console << U"[Game] オンライン対戦モードで初期化開始 isHost=" << getData().isHost;
+		
 		m_multiplayer = getData().multiplayer;
 		m_isOnlineMode = true;
 		m_isHost = getData().isHost;
 		m_isMyTurn = m_isHost;  // ホストが先攻
 		
 		// 初期状態を相手に送信
+		Console << U"[Game] 初期状態を送信します playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
 		sendGameStateSync();
 	}
 }

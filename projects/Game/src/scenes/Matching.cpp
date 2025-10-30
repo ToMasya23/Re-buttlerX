@@ -1,10 +1,61 @@
 # include "Matching.hpp"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
 Matching::Matching(const InitData& init)
 	: IScene{ init }
 {
 	m_multiplayer = std::make_shared<MultiplayerManager>();
 	m_hostDiscovery = std::make_unique<HostDiscovery>();
+}
+
+IPv4Address Matching::detectLocalIPForDisplay()
+{
+#ifdef _WIN32
+	char hostname[256];
+	if (gethostname(hostname, sizeof(hostname)) == SOCKET_ERROR)
+	{
+		return IPv4Address{ 127, 0, 0, 1 };
+	}
+	
+	struct addrinfo hints = {};
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	
+	struct addrinfo* result = nullptr;
+	if (getaddrinfo(hostname, nullptr, &hints, &result) != 0)
+	{
+		return IPv4Address{ 127, 0, 0, 1 };
+	}
+	
+	for (struct addrinfo* ptr = result; ptr != nullptr; ptr = ptr->ai_next)
+	{
+		if (ptr->ai_family == AF_INET)
+		{
+			struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)ptr->ai_addr;
+			uint32_t addr = ntohl(sockaddr_ipv4->sin_addr.s_addr);
+			
+			uint8 a = (addr >> 24) & 0xFF;
+			uint8 b = (addr >> 16) & 0xFF;
+			uint8 c = (addr >> 8) & 0xFF;
+			uint8 d = (addr >> 0) & 0xFF;
+			
+			if (a != 127)
+			{
+				freeaddrinfo(result);
+				return IPv4Address{ a, b, c, d };
+			}
+		}
+	}
+	
+	freeaddrinfo(result);
+#endif
+	
+	return IPv4Address{ 127, 0, 0, 1 };
 }
 
 void Matching::update()
@@ -73,6 +124,15 @@ void Matching::update()
 		if (m_multiplayer->isConnected())
 		{
 			// 接続成功、ゲームシーンへ
+			if (m_isHost)
+			{
+				Console << U"[ホスト] クライアントとの接続が確立されました。Game画面に遷移します。";
+			}
+			else
+			{
+				Console << U"[クライアント] ホストとの接続が確立されました。Game画面に遷移します。";
+			}
+			
 			m_hostDiscovery->stop();
 			getData().multiplayer = m_multiplayer;
 			getData().isHost = m_isHost;
@@ -102,6 +162,24 @@ void Matching::update()
 	{
 		// ホストリストを更新
 		const auto& hosts = m_hostDiscovery->getDiscoveredHosts();
+		
+		// スキャン完了した時の通知
+		static bool scanCompleteLogged = false;
+		if (!m_hostDiscovery->isSearching() && !scanCompleteLogged)
+		{
+			Console << U"[クライアント] スキャン完了。発見したホスト数: " << hosts.size();
+			if (hosts.isEmpty())
+			{
+				Console << U"[クライアント] ホストが見つかりませんでした。ホスト側でポートが開いているか確認してください。";
+			}
+			scanCompleteLogged = true;
+		}
+		
+		// ビューモードが変わったらフラグをリセット
+		if (m_viewMode != ViewMode::HostList)
+		{
+			scanCompleteLogged = false;
+		}
 		
 		// ホストボタンを動的に生成
 		while (m_hostButtons.size() < hosts.size())
@@ -182,11 +260,15 @@ void Matching::update()
 		
 		m_gamePort = *port;
 		
+		// ローカルIPアドレスを取得して表示
+		IPv4Address localIP = detectLocalIPForDisplay();
+		
 		// ホストとして開始
 		m_multiplayer->startHost(m_gamePort);
 		m_isHost = true;
 		m_viewMode = ViewMode::Waiting;
 		
+		Console << U"[ホスト] ローカルIP: " << localIP.str();
 		Console << U"[ホスト] ポート" << m_gamePort << U"で接続待機中...";
     }
     else if (m_joinButton.leftClicked())
@@ -196,6 +278,7 @@ void Matching::update()
 		m_viewMode = ViewMode::HostList;
 		
 		Console << U"[クライアント] ホスト検索中...";
+		Console << U"[クライアント] 約5秒間スキャンします...";
     }
     else if (m_backButton.leftClicked())
     {
@@ -325,7 +408,7 @@ void Matching::draw() const
 
         const Font& title = FontAsset(U"TitleFont");
         const Font& bold = FontAsset(U"Bold");
-        const RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
+        const s3d::RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
         panel.draw(PauseTheme::PanelFill).drawFrame(3, 0, PauseTheme::PanelFrame);
         title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
 

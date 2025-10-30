@@ -189,7 +189,7 @@ void HostDiscovery::scanNextHost()
 		{
 			// IPアドレスを文字列化
 			const auto& ipData = target.getData();
-			String ipStr = Format(U"{}.{}.{}.{}", ipData[0], ipData[1], ipData[2], ipData[3]);
+			String ipStr = Format(U"{}.{}.{}.{}", (int)ipData[0], (int)ipData[1], (int)ipData[2], (int)ipData[3]);
 			
 			HostInfo newHost;
 			newHost.hostName = U"ゲームホスト (" + ipStr + U")";
