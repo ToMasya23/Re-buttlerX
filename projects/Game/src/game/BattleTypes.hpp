@@ -16,6 +16,8 @@ enum class ActionType : uint8
 	None = 0,
 	Attack1 = 1,
 	Attack2 = 2,
-	Defend = 3,
-	Skill = 4,
+	Attack3 = 3,
+	Attack4 = 4,
+	Defend = 5,
+	Skill = 6,
 };

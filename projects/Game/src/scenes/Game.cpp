@@ -134,7 +134,11 @@ void Game::update()
             m_state.waitingForAcknowledge = false;
             if (m_state.nextAction == BattleState::NextAction::EnemyCounter)
 			{
-                BattleLogic::enemyCounter(m_state);
+				// PvPモードでは敵の反撃はネットワーク経由で来るのでスキップ
+				if (!m_isOnlineMode)
+				{
+					BattleLogic::enemyCounter(m_state);
+				}
 			}
             else if (m_state.nextAction == BattleState::NextAction::FinishBattle)
 			{
@@ -195,15 +199,33 @@ void Game::update()
             const CardSpec& c = cards[0];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                // 即時攻撃へ反映
-                BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(0));
-                // 使用記録とクールダウン開始
-                m_deck.onUse(0);
-                // PvPモードの場合、状態を同期
+                const int32 damage = BattleUtils::slotDamage(0);
+                
                 if (m_isOnlineMode)
                 {
+                    // PvPモード：ダメージを送信（敵のHPは減らさない）
+                    PlayerActionMessage msg;
+                    msg.type = MessageType::PlayerAction;
+                    msg.action = ActionType::Attack1;
+                    msg.damage = damage;
+                    msg.turnNumber = m_turnNumber;
+                    m_multiplayer->send(msg);
+                    
+                    // 自分の状態（コスト消費など）を同期
                     sendGameStateSync();
+                    
+                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.waitingForAcknowledge = true;
+                    m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
+                else
+                {
+                    // PvEモード：従来通りローカルで処理
+                    BattleLogic::handlePlayerAttack(m_state, damage);
+                }
+                
+                // 使用記録とクールダウン開始
+                m_deck.onUse(0);
             }
             else
             {
@@ -228,12 +250,29 @@ void Game::update()
             const CardSpec& c = cards[1];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(1));
-                m_deck.onUse(1);
+                const int32 damage = BattleUtils::slotDamage(1);
+                
                 if (m_isOnlineMode)
                 {
+                    PlayerActionMessage msg;
+                    msg.type = MessageType::PlayerAction;
+                    msg.action = ActionType::Attack2;
+                    msg.damage = damage;
+                    msg.turnNumber = m_turnNumber;
+                    m_multiplayer->send(msg);
+                    
                     sendGameStateSync();
+                    
+                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.waitingForAcknowledge = true;
+                    m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
+                else
+                {
+                    BattleLogic::handlePlayerAttack(m_state, damage);
+                }
+                
+                m_deck.onUse(1);
             }
             else
             {
@@ -258,12 +297,29 @@ void Game::update()
             const CardSpec& c = cards[2];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(2));
-                m_deck.onUse(2);
+                const int32 damage = BattleUtils::slotDamage(2);
+                
                 if (m_isOnlineMode)
                 {
+                    PlayerActionMessage msg;
+                    msg.type = MessageType::PlayerAction;
+                    msg.action = ActionType::Attack3;
+                    msg.damage = damage;
+                    msg.turnNumber = m_turnNumber;
+                    m_multiplayer->send(msg);
+                    
                     sendGameStateSync();
+                    
+                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.waitingForAcknowledge = true;
+                    m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
+                else
+                {
+                    BattleLogic::handlePlayerAttack(m_state, damage);
+                }
+                
+                m_deck.onUse(2);
             }
             else
             {
@@ -288,12 +344,29 @@ void Game::update()
             const CardSpec& c = cards[3];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(3));
-                m_deck.onUse(3);
+                const int32 damage = BattleUtils::slotDamage(3);
+                
                 if (m_isOnlineMode)
                 {
+                    PlayerActionMessage msg;
+                    msg.type = MessageType::PlayerAction;
+                    msg.action = ActionType::Attack4;
+                    msg.damage = damage;
+                    msg.turnNumber = m_turnNumber;
+                    m_multiplayer->send(msg);
+                    
                     sendGameStateSync();
+                    
+                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.waitingForAcknowledge = true;
+                    m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
+                else
+                {
+                    BattleLogic::handlePlayerAttack(m_state, damage);
+                }
+                
+                m_deck.onUse(3);
             }
             else
             {
@@ -547,12 +620,10 @@ void Game::handleNetworkMessages()
 	case MessageType::PlayerAction:
 		{
 			auto msg = m_multiplayer->receive<PlayerActionMessage>();
-			if (msg && msg->turnNumber == m_turnNumber)
+			if (msg)
 			{
-				// 相手の攻撃を受信
-				int32 damage = 0;
-				if (msg->action == ActionType::Attack1) damage = 10;
-				else if (msg->action == ActionType::Attack2) damage = 20;
+				// 相手の攻撃を受信（damageフィールドを使用）
+				int32 damage = msg->damage;
 				
 				if (damage > 0)
 				{
@@ -571,7 +642,7 @@ void Game::handleNetworkMessages()
 					m_state.hitTarget = BattleState::HitTarget::Player;
 					m_state.hitTimer.restart();
 					
-					// 状態同期
+					// 被ダメージ後、自分の状態を同期
 					sendGameStateSync();
 					
 					// ゲーム終了チェック
@@ -581,12 +652,10 @@ void Game::handleNetworkMessages()
 					}
 					else
 					{
-						m_state.nextAction = BattleState::NextAction::BackToSelection;
+						m_state.nextAction = BattleState::NextAction::EnemyCounter;
 					}
 					
 					m_state.waitingForAcknowledge = true;
-					m_isMyTurn = true;  // 自分のターンに戻る
-					m_turnNumber++;
 				}
 			}
 		}

@@ -17,6 +17,7 @@ struct PlayerActionMessage
 {
 	MessageType type = MessageType::PlayerAction;
 	ActionType action = ActionType::Attack1;
+	int32 damage = 0;  // ダメージ量
 	uint32 turnNumber = 0;
 };
 
