@@ -59,6 +59,9 @@ Game::Game(const InitData& init)
 		m_isOnlineMode = true;
 		m_isHost = getData().isHost;
 		m_isMyTurn = m_isHost;  // ホストが先攻
+		
+		// 初期状態を相手に送信
+		sendGameStateSync();
 	}
 }
 
@@ -214,7 +217,7 @@ void Game::update()
                     // 自分の状態（コスト消費など）を同期
                     sendGameStateSync();
                     
-                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.battleMessage = Format(U"攻撃！ダメージ", damage);
                     m_state.waitingForAcknowledge = true;
                     m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
@@ -263,7 +266,7 @@ void Game::update()
                     
                     sendGameStateSync();
                     
-                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
                     m_state.waitingForAcknowledge = true;
                     m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
@@ -310,7 +313,7 @@ void Game::update()
                     
                     sendGameStateSync();
                     
-                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
                     m_state.waitingForAcknowledge = true;
                     m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
@@ -357,7 +360,7 @@ void Game::update()
                     
                     sendGameStateSync();
                     
-                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
+                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
                     m_state.waitingForAcknowledge = true;
                     m_state.nextAction = BattleState::NextAction::BackToSelection;
                 }
@@ -522,11 +525,11 @@ void Game::draw() const
 			if (hasAny)
 			{
                 const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
-				title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+				title = (c.name.isEmpty() ? U"攻撃"_fmt(slot + 1) : c.name);
 			}
 			else
 			{
-				title = U"攻撃{}"_fmt(slot + 1);
+				title = U"攻撃"_fmt(slot + 1);
 			}
             const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
             bold(title).drawAt(20, rr.center(), txt);
@@ -666,14 +669,16 @@ void Game::handleNetworkMessages()
 			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
 			if (msg)
 			{
-				// ゲーム状態を同期
+				// 相手の状態を受信して、自分のenemyHPに反映
 				if (m_isHost)
 				{
+					// ホストの場合、クライアントの情報を受信
 					m_state.enemyHP = msg->clientHP;
 					m_state.enemyCrazy = msg->clientCrazy;
 				}
 				else
 				{
+					// クライアントの場合、ホストの情報を受信
 					m_state.enemyHP = msg->hostHP;
 					m_state.enemyCrazy = msg->hostCrazy;
 				}
@@ -718,6 +723,7 @@ void Game::sendGameStateSync()
 	GameStateSyncMessage msg;
 	msg.type = MessageType::GameStateSync;
 
+	// 自分の状態と、現在表示しているenemyHPを送信
 	if (m_isHost)
 	{
 		msg.hostHP = m_state.playerHP;
@@ -726,25 +732,25 @@ void Game::sendGameStateSync()
 		msg.hostDefendTime = m_state.defendTimer.sF();
 		msg.hostCrazy = m_state.playerCrazy;
 
-		msg.clientHP = m_state.enemyHP;
-		msg.clientCost = 0;  // 相手のコストは不要
-		msg.clientDefending = false;  // 相手の防御状態は不要
+		msg.clientHP = m_state.enemyHP;  // 現在表示している相手のHP
+		msg.clientCost = 0;
+		msg.clientDefending = false;
 		msg.clientDefendTime = 0;
 		msg.clientCrazy = m_state.enemyCrazy;
 	}
 	else
 	{
+		msg.hostHP = m_state.enemyHP;  // 現在表示している相手のHP
+		msg.hostCost = 0;
+		msg.hostDefending = false;
+		msg.hostDefendTime = 0;
+		msg.hostCrazy = m_state.enemyCrazy;
+		
 		msg.clientHP = m_state.playerHP;
 		msg.clientCost = m_state.costValue;
 		msg.clientDefending = m_state.defending;
 		msg.clientDefendTime = m_state.defendTimer.sF();
 		msg.clientCrazy = m_state.playerCrazy;
-
-		msg.hostHP = m_state.enemyHP;
-		msg.hostCost = 0;
-		msg.hostDefending = false;
-		msg.hostDefendTime = 0;
-		msg.hostCrazy = m_state.enemyCrazy;
 	}
 
 	msg.isHostTurn = m_isMyTurn && m_isHost;
