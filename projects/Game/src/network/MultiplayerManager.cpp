@@ -146,6 +146,8 @@ void MultiplayerManager::send<PlayerActionMessage>(const PlayerActionMessage& me
 	if (!isConnected())
 		return;
 
+	Console << U"[MultiplayerManager::send] damage=" << message.damage;
+
 	s3d::Array<uint8> data;
 	data.push_back(static_cast<uint8>(message.type));
 	data.push_back(static_cast<uint8>(message.action));
@@ -164,6 +166,8 @@ void MultiplayerManager::send<PlayerActionMessage>(const PlayerActionMessage& me
 	data.push_back((turnNum >> 24) & 0xFF);
 
 	const uint32 size = static_cast<uint32>(data.size());
+
+	Console << U"[MultiplayerManager::send] データサイズ=" << size << U" bytes";
 
 	if (m_role == Role::Host)
 	{
@@ -186,8 +190,13 @@ s3d::Optional<PlayerActionMessage> MultiplayerManager::receive<PlayerActionMessa
 	auto blob = m_receiveQueue.front();
 	m_receiveQueue.pop_front();
 
+	Console << U"[MultiplayerManager::receive] blobサイズ=" << blob.size();
+
 	if (blob.size() < 10)  // type(1) + action(1) + damage(4) + turnNumber(4) = 10 bytes
+	{
+		Console << U"[MultiplayerManager::receive] エラー: サイズ不足";
 		return s3d::none;
+	}
 
 	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
 
@@ -205,6 +214,10 @@ s3d::Optional<PlayerActionMessage> MultiplayerManager::receive<PlayerActionMessa
 		(static_cast<uint32>(data[7]) << 8) |
 		(static_cast<uint32>(data[8]) << 16) |
 		(static_cast<uint32>(data[9]) << 24);
+
+	Console << U"[MultiplayerManager::receive] damage=" << message.damage 
+			<< U" action=" << (int)message.action
+			<< U" bytes: [" << (int)data[2] << U"," << (int)data[3] << U"," << (int)data[4] << U"," << (int)data[5] << U"]";
 
 	return message;
 }
