@@ -50,6 +50,15 @@ Game::Game(const InitData& init)
 	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
 	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
 	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
+	
+	// ===== オンライン対戦の初期化 =====
+	if (getData().multiplayer)
+	{
+		m_multiplayer = getData().multiplayer;
+		m_isOnlineMode = true;
+		m_isHost = getData().isHost;
+		m_isMyTurn = m_isHost;  // ホストが先攻
+	}
 }
 
 void Game::update()
@@ -93,6 +102,13 @@ void Game::update()
 
         return;
     }
+
+	// ===== オンライン対戦のネットワーク処理 =====
+	if (m_isOnlineMode && m_multiplayer)
+	{
+		m_multiplayer->update();
+		handleNetworkMessages();
+	}
 
     // コスト回復（停止条件を考慮）
     if (!BattleLogic::isRegenBlocked(m_state))
@@ -490,5 +506,114 @@ void Game::finishBattleIfNeeded()
         getData().lastScore = Max(0, m_state.playerHP);
 		changeScene(State::Result);
 	}
+}
+
+void Game::handleNetworkMessages()
+{
+	if (!m_multiplayer)
+		return;
+
+	auto msgType = m_multiplayer->peekMessageType();
+	if (!msgType)
+		return;
+
+	switch (*msgType)
+	{
+	case MessageType::PlayerAction:
+		{
+			auto msg = m_multiplayer->receive<PlayerActionMessage>();
+			if (msg && msg->turnNumber == m_turnNumber)
+			{
+				// 相手の行動を受信してローカルで処理
+				// ここでは簡易的な処理のみ（実際のゲームロジックは既存のものを使用）
+				m_isMyTurn = true;  // 自分のターンに切り替え
+			}
+		}
+		break;
+
+	case MessageType::GameStateSync:
+		{
+			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
+			if (msg)
+			{
+				// ゲーム状態を同期
+				if (m_isHost)
+				{
+					m_state.enemyHP = msg->clientHP;
+					m_state.enemyCrazy = msg->clientCrazy;
+				}
+				else
+				{
+					m_state.enemyHP = msg->hostHP;
+					m_state.enemyCrazy = msg->hostCrazy;
+				}
+			}
+		}
+		break;
+
+	case MessageType::TurnChange:
+		{
+			auto msg = m_multiplayer->receive<TurnChangeMessage>();
+			if (msg)
+			{
+				m_turnNumber = msg->turnNumber;
+				m_isMyTurn = (m_isHost == msg->isHostTurn);
+			}
+		}
+		break;
+
+	case MessageType::BattleEnd:
+		{
+			auto msg = m_multiplayer->receive<BattleEndMessage>();
+			if (msg)
+			{
+				// バトル終了処理
+				getData().lastMode = GameData::GameMode::PvP;
+				getData().lastScore = m_isHost ? msg->hostFinalHP : msg->clientFinalHP;
+				changeScene(State::Result);
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void Game::sendGameStateSync()
+{
+	if (!m_multiplayer || !m_isOnlineMode)
+		return;
+
+	GameStateSyncMessage msg;
+	msg.type = MessageType::GameStateSync;
+
+	if (m_isHost)
+	{
+		msg.hostHP = m_state.playerHP;
+		msg.hostCost = m_state.costValue;
+		msg.hostDefending = m_state.defending;
+		msg.hostDefendTime = m_state.defendTimer.sF();
+		msg.hostCrazy = m_state.playerCrazy;
+
+		msg.clientHP = m_state.enemyHP;
+		msg.clientCrazy = m_state.enemyCrazy;
+	}
+	else
+	{
+		msg.clientHP = m_state.playerHP;
+		msg.clientCost = m_state.costValue;
+		msg.clientDefending = m_state.defending;
+		msg.clientDefendTime = m_state.defendTimer.sF();
+		msg.clientCrazy = m_state.playerCrazy;
+
+		msg.hostHP = m_state.enemyHP;
+		msg.hostCrazy = m_state.enemyCrazy;
+	}
+
+	msg.isHostTurn = m_isMyTurn && m_isHost;
+	msg.turnNumber = m_turnNumber;
+
+	m_multiplayer->send(msg);
 }
 

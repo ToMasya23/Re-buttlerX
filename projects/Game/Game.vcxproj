@@ -118,6 +118,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\network\MultiplayerManager.cpp" />
     <ClCompile Include="src\scenes\Title.cpp" />
     <ClCompile Include="src\scenes\Game.cpp" />
     <ClCompile Include="src\scenes\Battle.cpp" />
@@ -340,6 +341,9 @@
     <ClInclude Include="src\Common.hpp" />
     <ClInclude Include="src\Game.hpp" />
     <ClInclude Include="src\Title.hpp" />
+    <ClInclude Include="src\game\BattleTypes.hpp" />
+    <ClInclude Include="src\network\BattleMessages.hpp" />
+    <ClInclude Include="src\network\MultiplayerManager.hpp" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>

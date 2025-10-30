@@ -1,5 +1,9 @@
 ﻿# pragma once
 # include <Siv3D.hpp>
+# include <memory>
+
+// Forward declaration
+class MultiplayerManager;
 
 // シーンのステート
 enum class State
@@ -32,6 +36,10 @@ struct GameData
 
     // 直前にプレイしたモード
     GameMode lastMode = GameMode::Unknown;
+
+    // オンライン対戦用
+    std::shared_ptr<MultiplayerManager> multiplayer;
+    bool isHost = false;
 
 };
 

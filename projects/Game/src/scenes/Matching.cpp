@@ -3,7 +3,8 @@
 Matching::Matching(const InitData& init)
 	: IScene{ init }
 {
-
+	m_ipInput.text = U"127.0.0.1";
+	m_multiplayer = std::make_shared<MultiplayerManager>();
 }
 
 void Matching::update()
@@ -58,18 +59,60 @@ void Matching::update()
         return;
     }
 
-    m_startTr.update(m_startButton.mouseOver());
+	// 接続待機中の処理
+	if (m_isWaitingForConnection)
+	{
+		m_multiplayer->update();
+		
+		if (m_multiplayer->isConnected())
+		{
+			// 接続成功、ゲームシーンへ
+			getData().multiplayer = m_multiplayer;
+			getData().isHost = m_isHost;
+			getData().lastMode = GameData::GameMode::PvP;
+			changeScene(State::Game);
+		}
+		
+		if (m_backButton.leftClicked())
+		{
+			m_multiplayer->disconnect();
+			m_isWaitingForConnection = false;
+		}
+		
+		m_backTr.update(m_backButton.mouseOver());
+		if (m_backButton.mouseOver())
+		{
+			Cursor::RequestStyle(CursorStyle::Hand);
+		}
+		
+		return;
+	}
+
+    m_hostTr.update(m_hostButton.mouseOver());
+    m_joinTr.update(m_joinButton.mouseOver());
     m_backTr.update(m_backButton.mouseOver());
 
-    if (m_startButton.mouseOver() || m_backButton.mouseOver())
+    if (m_hostButton.mouseOver() || m_joinButton.mouseOver() || m_backButton.mouseOver())
     {
         Cursor::RequestStyle(CursorStyle::Hand);
     }
 
-    if (m_startButton.leftClicked())
+    if (m_hostButton.leftClicked())
     {
-        getData().lastMode = GameData::GameMode::PvP;
-        changeScene(State::Game);
+		// ホストとして開始
+		m_multiplayer->startHost(12345);
+		m_isHost = true;
+		m_isWaitingForConnection = true;
+    }
+    else if (m_joinButton.leftClicked())
+    {
+		// クライアントとして接続
+		s3d::IPv4Address addr = s3d::IPv4Address::Localhost();
+		if (m_multiplayer->connect(addr))
+		{
+			m_isHost = false;
+			m_isWaitingForConnection = true;
+		}
     }
     else if (m_backButton.leftClicked())
     {
@@ -98,15 +141,29 @@ void Matching::draw() const
         const ScopedRenderTarget2D rt{ m_sceneRT };
         m_sceneRT.clear(ColorF{ 0.2, 0.2, 0.2 });
 
-        FontAsset(U"TitleFont")(U"待機中...")
-            .drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 72, Vec2{ 400, 200 });
+		if (m_isWaitingForConnection)
+		{
+			FontAsset(U"TitleFont")(m_isHost ? U"接続待機中..." : U"接続中...")
+				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 72, Vec2{ 400, 200 });
+			
+			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
+			const Font& bold = FontAsset(U"Bold");
+			bold(U"キャンセル").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
+		}
+		else
+		{
+			FontAsset(U"TitleFont")(U"オンライン対戦")
+				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 72, Vec2{ 400, 150 });
 
-        m_startButton.draw(ColorF{ 1.0, m_startTr.value() }).drawFrame(2);
-        m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
+			m_hostButton.draw(ColorF{ 1.0, m_hostTr.value() }).drawFrame(2);
+			m_joinButton.draw(ColorF{ 1.0, m_joinTr.value() }).drawFrame(2);
+			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
 
-        const Font& bold = FontAsset(U"Bold");
-        bold(U"開始（モック）").drawAt(28, m_startButton.center(), ColorF{ 0.1 });
-        bold(U"ロビーに戻る").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
+			const Font& bold = FontAsset(U"Bold");
+			bold(U"ホストとして開始").drawAt(28, m_hostButton.center(), ColorF{ 0.1 });
+			bold(U"参加する").drawAt(28, m_joinButton.center(), ColorF{ 0.1 });
+			bold(U"ロビーに戻る").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
+		}
     }
 
     if (m_paused)
