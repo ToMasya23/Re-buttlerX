@@ -105,9 +105,9 @@ void HostDiscovery::generateScanTargets()
 		Console << U"[HostDiscovery] ローカルIP検出: " << (int)a << U"." << (int)b << U"." << (int)c << U".X";
 		
 		// 150.65.x.x のような大学/企業ネットワークの場合、複数のサブネットをスキャン
-		// 自分のサブネット + 隣接するサブネット（±5）をスキャン
+		// 自分のサブネット + 隣接するサブネット（±10）をスキャン
 		Console << U"[HostDiscovery] サブネット " << (int)a << U"." << (int)b << U"." << (int)c << U".1-50";
-		Console << U"[HostDiscovery] および隣接サブネット（±5）をスキャンします";
+		Console << U"[HostDiscovery] および隣接サブネット（±10）をスキャンします";
 		
 		// 自分のサブネット
 		for (uint16 i = 1; i <= 50; ++i)
@@ -115,8 +115,8 @@ void HostDiscovery::generateScanTargets()
 			m_scanTargets.emplace_back(a, b, c, static_cast<uint8>(i));
 		}
 		
-		// 隣接する10個のサブネット（c-5 から c+5）を各10個ずつスキャン
-		for (int offset = -5; offset <= 5; ++offset)
+		// 隣接する20個のサブネット（c-10 から c+10）を各10個ずつスキャン
+		for (int offset = -10; offset <= 10; ++offset)
 		{
 			if (offset == 0) continue;  // 自分のサブネットはすでに追加済み
 			
