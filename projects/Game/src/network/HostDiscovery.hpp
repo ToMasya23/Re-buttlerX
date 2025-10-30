@@ -51,9 +51,13 @@ private:
 	
 	// タイマー
 	double m_lastScanTime = 0.0;
-	static constexpr double SCAN_INTERVAL = 0.05;  // 各IPのスキャン間隔
+	static constexpr double SCAN_INTERVAL = 0.01;  // 各バッチのスキャン間隔（0.01秒 = 10倍高速化）
+	static constexpr size_t BATCH_SIZE = 10;       // 一度にスキャンするホスト数
 	
 	void generateScanTargets();
 	void scanNextHost();
+	
+	// ローカルIPアドレスを検出
+	IPv4Address detectLocalIP();
 };
 

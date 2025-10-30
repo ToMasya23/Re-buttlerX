@@ -1,6 +1,13 @@
 #include "HostDiscovery.hpp"
 #include <thread>
 
+// Windows用のネットワークAPI
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
 HostDiscovery::HostDiscovery()
 {
 }
@@ -35,10 +42,14 @@ void HostDiscovery::update()
 	
 	const double currentTime = Scene::Time();
 	
-	// 一定間隔でスキャン
+	// 一定間隔でバッチスキャン
 	if (currentTime - m_lastScanTime >= SCAN_INTERVAL)
 	{
-		scanNextHost();
+		// バッチサイズ分スキャン（10個ずつ）
+		for (size_t i = 0; i < BATCH_SIZE && m_currentScanIndex < m_scanTargets.size(); ++i)
+		{
+			scanNextHost();
+		}
 		m_lastScanTime = currentTime;
 	}
 	
@@ -62,27 +73,97 @@ void HostDiscovery::generateScanTargets()
 {
 	m_scanTargets.clear();
 	
-	// ローカルIPアドレスのベースを取得（デフォルト: 192.168.1.X）
-	// 実際の環境では192.168.0.X, 192.168.11.X, 10.0.0.X なども考慮
-	Array<Array<uint8>> commonRanges = {
-		{ 192, 168, 1 },
-		{ 192, 168, 0 },
-		{ 192, 168, 11 },
-		{ 10, 0, 0 }
-	};
+	// ローカルIPアドレスを自動検出
+	IPv4Address localIP = detectLocalIP();
 	
-	Console << U"[HostDiscovery] 一般的なIPレンジをスキャンします";
-	
-	// 各一般的なレンジについてスキャン対象を生成
-	for (const auto& range : commonRanges)
+	if (localIP == IPv4Address{ 127, 0, 0, 1 } || localIP == IPv4Address{ 0, 0, 0, 0 })
 	{
-		for (uint16 i = 1; i <= 254; ++i)
+		// 検出失敗時は一般的なレンジをスキャン
+		Console << U"[HostDiscovery] ローカルIP検出失敗。一般的なレンジをスキャンします";
+		Array<Array<uint8>> commonRanges = {
+			{ 192, 168, 1 },
+			{ 192, 168, 0 }
+		};
+		
+		for (const auto& range : commonRanges)
 		{
-			m_scanTargets.emplace_back(range[0], range[1], range[2], static_cast<uint8>(i));
+			// 各レンジの最初の50個をスキャン
+			for (uint16 i = 1; i <= 50; ++i)
+			{
+				m_scanTargets.emplace_back(range[0], range[1], range[2], static_cast<uint8>(i));
+			}
+		}
+	}
+	else
+	{
+		// 検出したローカルIPと同じサブネットをスキャン
+		const auto& ipData = localIP.getData();
+		uint8 a = ipData[0];
+		uint8 b = ipData[1];
+		uint8 c = ipData[2];
+		
+		Console << U"[HostDiscovery] ローカルIP検出: " << (int)a << U"." << (int)b << U"." << (int)c << U".X";
+		Console << U"[HostDiscovery] 同じサブネット（" << (int)a << U"." << (int)b << U"." << (int)c << U".1-50）をスキャンします";
+		
+		// 同じサブネットの1-50をスキャン
+		for (uint16 i = 1; i <= 50; ++i)
+		{
+			m_scanTargets.emplace_back(a, b, c, static_cast<uint8>(i));
 		}
 	}
 	
 	Console << U"[HostDiscovery] " << m_scanTargets.size() << U" 個のアドレスをスキャン";
+}
+
+IPv4Address HostDiscovery::detectLocalIP()
+{
+#ifdef _WIN32
+	char hostname[256];
+	if (gethostname(hostname, sizeof(hostname)) == SOCKET_ERROR)
+	{
+		Console << U"[HostDiscovery] ホスト名の取得に失敗";
+		return IPv4Address{ 127, 0, 0, 1 };
+	}
+	
+	struct addrinfo hints = {};
+	hints.ai_family = AF_INET;  // IPv4
+	hints.ai_socktype = SOCK_STREAM;
+	
+	struct addrinfo* result = nullptr;
+	if (getaddrinfo(hostname, nullptr, &hints, &result) != 0)
+	{
+		Console << U"[HostDiscovery] アドレス情報の取得に失敗";
+		return IPv4Address{ 127, 0, 0, 1 };
+	}
+	
+	// 最初の非ループバックアドレスを使用
+	for (struct addrinfo* ptr = result; ptr != nullptr; ptr = ptr->ai_next)
+	{
+		if (ptr->ai_family == AF_INET)
+		{
+			struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)ptr->ai_addr;
+			uint32_t addr = ntohl(sockaddr_ipv4->sin_addr.s_addr);
+			
+			uint8 a = (addr >> 24) & 0xFF;
+			uint8 b = (addr >> 16) & 0xFF;
+			uint8 c = (addr >> 8) & 0xFF;
+			uint8 d = (addr >> 0) & 0xFF;
+			
+			// ループバックアドレス（127.x.x.x）をスキップ
+			if (a != 127)
+			{
+				freeaddrinfo(result);
+				Console << U"[HostDiscovery] ローカルIPを検出: " << (int)a << U"." << (int)b << U"." << (int)c << U"." << (int)d;
+				return IPv4Address{ a, b, c, d };
+			}
+		}
+	}
+	
+	freeaddrinfo(result);
+#endif
+	
+	Console << U"[HostDiscovery] 有効なローカルIPが見つかりませんでした";
+	return IPv4Address{ 127, 0, 0, 1 };
 }
 
 void HostDiscovery::scanNextHost()
@@ -96,18 +177,22 @@ void HostDiscovery::scanNextHost()
 	// 非同期でTCP接続を試行
 	TCPClient testClient;
 	
-	// 短時間で接続テスト（成功したらホストとして追加）
+	// 短時間で接続テスト（タイムアウトなしで試行）
 	const bool connected = testClient.connect(target, DEFAULT_GAME_PORT);
 	
 	if (connected)
 	{
 		// 少し待って接続を確認
-		System::Sleep(10ms);
+		System::Sleep(5ms);
 		
 		if (testClient.isConnected())
 		{
+			// IPアドレスを文字列化
+			const auto& ipData = target.getData();
+			String ipStr = Format(U"{}.{}.{}.{}", ipData[0], ipData[1], ipData[2], ipData[3]);
+			
 			HostInfo newHost;
-			newHost.hostName = U"ゲームホスト";
+			newHost.hostName = U"ゲームホスト (" + ipStr + U")";
 			newHost.address = target;
 			newHost.port = DEFAULT_GAME_PORT;
 			newHost.lastSeen = Scene::Time();
@@ -115,7 +200,7 @@ void HostDiscovery::scanNextHost()
 			
 			m_discoveredHosts.push_back(newHost);
 			
-			Console << U"[HostDiscovery] ホスト発見!";
+			Console << U"[HostDiscovery] ホスト発見: " << ipStr;
 			
 			testClient.disconnect();
 		}
