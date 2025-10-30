@@ -854,6 +854,9 @@
     <ClInclude Include="src\game\BattleTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\game\PlayerState.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\network\BattleMessages.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -342,6 +342,7 @@
     <ClInclude Include="src\Game.hpp" />
     <ClInclude Include="src\Title.hpp" />
     <ClInclude Include="src\game\BattleTypes.hpp" />
+    <ClInclude Include="src\game\PlayerState.hpp" />
     <ClInclude Include="src\network\BattleMessages.hpp" />
     <ClInclude Include="src\network\MultiplayerManager.hpp" />
     <ClInclude Include="stdafx.h" />
