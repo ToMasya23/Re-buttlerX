@@ -132,6 +132,18 @@ void Game::update()
     // ---- メッセージ待機中は進行を止める ----
     if (m_state.waitingForAcknowledge)
 	{
+		// バトル終了時はPvPモードでも自動的に遷移
+		if (m_state.nextAction == BattleState::NextAction::FinishBattle)
+		{
+			// 少し待機してから自動遷移
+			if (m_state.hitTimer.sF() > 2.0)
+			{
+				Console << U"[自動遷移] バトル終了 -> リザルト画面へ";
+				finishBattleIfNeeded();
+				return;
+			}
+		}
+		
         if (BattleLogic::advanceInputDown())
 		{
             m_state.waitingForAcknowledge = false;
@@ -705,6 +717,15 @@ void Game::handleNetworkMessages()
 					Console << U"[クライアント] enemyHPを更新: " << m_state.enemyHP;
 				}
 				m_turnNumber = msg->turnNumber;
+				
+				// 相手のHPが0以下になったら勝利
+				if (m_state.enemyHP <= 0)
+				{
+					Console << U"[勝利判定] 相手のHPが0以下になりました";
+					m_state.battleMessage = U"勝利！";
+					m_state.nextAction = BattleState::NextAction::FinishBattle;
+					m_state.waitingForAcknowledge = true;
+				}
 			}
 		}
 		break;
