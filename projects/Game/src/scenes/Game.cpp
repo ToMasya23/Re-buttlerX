@@ -669,19 +669,21 @@ void Game::handleNetworkMessages()
 			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
 			if (msg)
 			{
-				// 相手の状態を受信して、自分のenemyHPに反映
+				// 相手（enemy）の状態だけを更新し、自分の状態は更新しない
+				// add_networkブランチと同じ実装
 				if (m_isHost)
 				{
-					// ホストの場合、クライアントの情報を受信
+					// ホストの場合：相手がclientなので、client側の情報だけを更新
 					m_state.enemyHP = msg->clientHP;
 					m_state.enemyCrazy = msg->clientCrazy;
 				}
 				else
 				{
-					// クライアントの場合、ホストの情報を受信
+					// クライアントの場合：相手がhostなので、host側の情報だけを更新
 					m_state.enemyHP = msg->hostHP;
 					m_state.enemyCrazy = msg->hostCrazy;
 				}
+				m_turnNumber = msg->turnNumber;
 			}
 		}
 		break;
@@ -723,29 +725,31 @@ void Game::sendGameStateSync()
 	GameStateSyncMessage msg;
 	msg.type = MessageType::GameStateSync;
 
-	// 自分の状態と、現在表示しているenemyHPを送信
+	// 現在の状態をメッセージに格納（add_networkブランチと同じ構造）
 	if (m_isHost)
 	{
+		// ホストの場合：自分がhost、相手がclient
 		msg.hostHP = m_state.playerHP;
 		msg.hostCost = m_state.costValue;
 		msg.hostDefending = m_state.defending;
 		msg.hostDefendTime = m_state.defendTimer.sF();
 		msg.hostCrazy = m_state.playerCrazy;
 
-		msg.clientHP = m_state.enemyHP;  // 現在表示している相手のHP
-		msg.clientCost = 0;
+		msg.clientHP = m_state.enemyHP;
+		msg.clientCost = 0;  // 相手のコストは不要
 		msg.clientDefending = false;
 		msg.clientDefendTime = 0;
 		msg.clientCrazy = m_state.enemyCrazy;
 	}
 	else
 	{
-		msg.hostHP = m_state.enemyHP;  // 現在表示している相手のHP
+		// クライアントの場合：自分がclient、相手がhost
+		msg.hostHP = m_state.enemyHP;
 		msg.hostCost = 0;
 		msg.hostDefending = false;
 		msg.hostDefendTime = 0;
 		msg.hostCrazy = m_state.enemyCrazy;
-		
+
 		msg.clientHP = m_state.playerHP;
 		msg.clientCost = m_state.costValue;
 		msg.clientDefending = m_state.defending;
@@ -753,7 +757,7 @@ void Game::sendGameStateSync()
 		msg.clientCrazy = m_state.playerCrazy;
 	}
 
-	msg.isHostTurn = m_isMyTurn && m_isHost;
+	msg.isHostTurn = m_isHost ? m_isMyTurn : !m_isMyTurn;
 	msg.turnNumber = m_turnNumber;
 
 	m_multiplayer->send(msg);
