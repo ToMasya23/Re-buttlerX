@@ -229,6 +229,9 @@ void MultiplayerManager::send<GameStateSyncMessage>(const GameStateSyncMessage& 
 	if (!isConnected())
 		return;
 
+	Console << U"[MultiplayerManager::send<GameStateSync>] type=" << (int)message.type 
+			<< U" hostHP=" << message.hostHP << U" clientHP=" << message.clientHP;
+
 	s3d::Array<uint8> data;
 	data.push_back(static_cast<uint8>(message.type));
 
@@ -271,6 +274,9 @@ void MultiplayerManager::send<GameStateSyncMessage>(const GameStateSyncMessage& 
 	data.push_back((turnNum >> 24) & 0xFF);
 
 	const uint32 size = static_cast<uint32>(data.size());
+	
+	Console << U"[MultiplayerManager::send<GameStateSync>] データサイズ=" << size << U" bytes";
+	
 	if (m_role == Role::Host)
 	{
 		m_server.send(&size, sizeof(size), m_sessionID);
@@ -292,8 +298,13 @@ s3d::Optional<GameStateSyncMessage> MultiplayerManager::receive<GameStateSyncMes
 	auto blob = m_receiveQueue.front();
 	m_receiveQueue.pop_front();
 
+	Console << U"[MultiplayerManager::receive<GameStateSync>] blobサイズ=" << blob.size();
+
 	if (blob.size() < 59)
+	{
+		Console << U"[MultiplayerManager::receive<GameStateSync>] エラー: サイズ不足 (必要:59)";
 		return s3d::none;
+	}
 
 	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
 	size_t offset = 0;
@@ -341,6 +352,9 @@ s3d::Optional<GameStateSyncMessage> MultiplayerManager::receive<GameStateSyncMes
 		(static_cast<uint32>(data[offset + 1]) << 8) |
 		(static_cast<uint32>(data[offset + 2]) << 16) |
 		(static_cast<uint32>(data[offset + 3]) << 24);
+
+	Console << U"[MultiplayerManager::receive<GameStateSync>] hostHP=" << message.hostHP 
+			<< U" clientHP=" << message.clientHP;
 
 	return message;
 }
