@@ -42,6 +42,7 @@ private:
 	Role m_role = Role::None;
 	s3d::Array<s3d::Blob> m_receiveQueue;
 	s3d::Optional<s3d::TCPSessionID> m_sessionID;  // ホスト側のセッションID
+	bool m_clientConnectSucceeded = false;  // クライアント側のconnect()が成功したか
 
 	void processIncomingData();
 };

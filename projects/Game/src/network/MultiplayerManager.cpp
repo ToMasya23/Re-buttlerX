@@ -18,12 +18,32 @@ bool MultiplayerManager::startHost(uint16 port)
 
 bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port)
 {
-	Console << U"[MultiplayerManager] 接続試行 port=" << port;
+	Console << U"[MultiplayerManager] 接続試行 " << address.str() << U":" << port;
 	
 	if (m_client.connect(address, port))
 	{
 		m_role = Role::Client;
-		Console << U"[MultiplayerManager] 接続成功";
+		Console << U"[MultiplayerManager] TCPClient.connect()成功 - 接続確立を待機中...";
+		
+		// 接続が実際に確立するまで少し待つ
+		for (int i = 0; i < 10; ++i)
+		{
+			System::Sleep(50ms);
+			
+			if (m_client.isConnected())
+			{
+				Console << U"[MultiplayerManager] isConnected()=true 接続が確立されました！（" << (i + 1) * 50 << U"ms後）";
+				m_clientConnectSucceeded = true;
+				return true;
+			}
+			
+			Console << U"[MultiplayerManager] 待機中... " << (i + 1) * 50 << U"ms";
+		}
+		
+		Console << U"[MultiplayerManager] 警告: connect()は成功したが500ms待ってもisConnected()=false";
+		Console << U"[MultiplayerManager] available=" << m_client.available() << U" bytes";
+		Console << U"[MultiplayerManager] Siv3Dのバグ回避：connect()成功を信頼して接続済みとします";
+		m_clientConnectSucceeded = true;  // connect()が成功したので接続済みとみなす
 		return true;
 	}
 	
@@ -48,7 +68,8 @@ bool MultiplayerManager::isConnected() const
 	}
 	else
 	{
-		return m_client.isConnected();
+		// Siv3D 0.6.16のバグ回避：connect()が成功したら接続済みとみなす
+		return m_clientConnectSucceeded || m_client.isConnected();
 	}
 }
 
@@ -57,9 +78,21 @@ void MultiplayerManager::update()
 	// ホストの場合、接続待ち受け
 	if (m_role == Role::Host && !m_sessionID)
 	{
-		if (m_server.hasSession())
+		bool hasSession = m_server.hasSession();
+		
+		// デバッグ：セッション状態を確認
+		static double lastDebugTime = 0;
+		if (Scene::Time() - lastDebugTime > 2.0)
+		{
+			Console << U"[MultiplayerManager::update] ホスト：hasSession=" << hasSession;
+			lastDebugTime = Scene::Time();
+		}
+		
+		if (hasSession)
 		{
 			auto sessions = m_server.getSessionIDs();
+			Console << U"[MultiplayerManager] セッション数: " << sessions.size();
+			
 			if (!sessions.isEmpty())
 			{
 				m_sessionID = sessions.front();

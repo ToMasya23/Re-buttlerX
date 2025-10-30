@@ -121,6 +121,22 @@ void Matching::update()
 	{
 		m_multiplayer->update();
 		
+		// デバッグ：接続状態を定期的にログ出力
+		static double lastCheckTime = 0;
+		if (Scene::Time() - lastCheckTime > 1.0)
+		{
+			bool connected = m_multiplayer->isConnected();
+			if (m_isHost)
+			{
+				Console << U"[ホスト] 接続待機中... isConnected=" << connected;
+			}
+			else
+			{
+				Console << U"[クライアント] 接続確認中... isConnected=" << connected;
+			}
+			lastCheckTime = Scene::Time();
+		}
+		
 		if (m_multiplayer->isConnected())
 		{
 			// 接続成功、ゲームシーンへ
