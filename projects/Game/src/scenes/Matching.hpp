@@ -2,6 +2,7 @@
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
 # include "../network/MultiplayerManager.hpp"
+# include "../network/HostDiscovery.hpp"
 
 // 待機（マッチング）シーン
 class Matching : public App::Scene
@@ -16,6 +17,15 @@ public:
 
 private:
 
+	enum class ViewMode
+	{
+		Menu,          // メインメニュー
+		HostList,      // ホストリスト表示
+		Waiting        // 接続待機中
+	};
+
+	ViewMode m_viewMode = ViewMode::Menu;
+
 	RoundRect m_hostButton{ Arg::center(400, 280), 300, 60, 8 };
 	RoundRect m_joinButton{ Arg::center(400, 360), 300, 60, 8 };
 	RoundRect m_backButton{ Arg::center(400, 440), 300, 60, 8 };
@@ -26,9 +36,14 @@ private:
 	
 	// ネットワーク関連
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
-	bool m_isWaitingForConnection = false;
+	std::unique_ptr<HostDiscovery> m_hostDiscovery;
 	bool m_isHost = false;
-	s3d::TextEditState m_ipInput;
+	uint16 m_gamePort = 12345;
+	
+	// ホストリスト用
+	Array<RoundRect> m_hostButtons;
+	Array<Transition> m_hostButtonTransitions;
+	int32 m_selectedHostIndex = -1;
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;

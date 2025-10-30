@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -119,6 +119,7 @@
   <ItemGroup>
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\network\MultiplayerManager.cpp" />
+    <ClCompile Include="src\network\HostDiscovery.cpp" />
     <ClCompile Include="src\scenes\Title.cpp" />
     <ClCompile Include="src\scenes\Game.cpp" />
     <ClCompile Include="src\scenes\Battle.cpp" />
@@ -345,6 +346,7 @@
     <ClInclude Include="src\game\PlayerState.hpp" />
     <ClInclude Include="src\network\BattleMessages.hpp" />
     <ClInclude Include="src\network\MultiplayerManager.hpp" />
+    <ClInclude Include="src\network\HostDiscovery.hpp" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
@@ -436,3 +438,4 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
+

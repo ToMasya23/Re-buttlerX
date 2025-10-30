@@ -3,8 +3,8 @@
 Matching::Matching(const InitData& init)
 	: IScene{ init }
 {
-	m_ipInput.text = U"192.168.1.100";  // デフォルトをローカルネットワークのサンプルIPに
 	m_multiplayer = std::make_shared<MultiplayerManager>();
+	m_hostDiscovery = std::make_unique<HostDiscovery>();
 }
 
 void Matching::update()
@@ -59,24 +59,33 @@ void Matching::update()
         return;
     }
 
+	// ホスト検索を更新
+	if (m_hostDiscovery)
+	{
+		m_hostDiscovery->update();
+	}
+
 	// 接続待機中の処理
-	if (m_isWaitingForConnection)
+	if (m_viewMode == ViewMode::Waiting)
 	{
 		m_multiplayer->update();
 		
 		if (m_multiplayer->isConnected())
 		{
 			// 接続成功、ゲームシーンへ
+			m_hostDiscovery->stop();
 			getData().multiplayer = m_multiplayer;
 			getData().isHost = m_isHost;
 			getData().lastMode = GameData::GameMode::PvP;
 			changeScene(State::Game);
+			return;
 		}
 		
 		if (m_backButton.leftClicked())
 		{
 			m_multiplayer->disconnect();
-			m_isWaitingForConnection = false;
+			m_hostDiscovery->stop();
+			m_viewMode = ViewMode::Menu;
 		}
 		
 		m_backTr.update(m_backButton.mouseOver());
@@ -87,7 +96,71 @@ void Matching::update()
 		
 		return;
 	}
+	
+	// ホストリスト表示中
+	if (m_viewMode == ViewMode::HostList)
+	{
+		// ホストリストを更新
+		const auto& hosts = m_hostDiscovery->getDiscoveredHosts();
+		
+		// ホストボタンを動的に生成
+		while (m_hostButtons.size() < hosts.size())
+		{
+			size_t index = m_hostButtons.size();
+			m_hostButtons.emplace_back(Arg::center(400, 200 + index * 70), 500, 60, 8);
+			m_hostButtonTransitions.emplace_back(0.4s, 0.2s);
+		}
+		
+		// トランジションを更新
+		for (size_t i = 0; i < Min(m_hostButtons.size(), hosts.size()); ++i)
+		{
+			m_hostButtonTransitions[i].update(m_hostButtons[i].mouseOver());
+			
+			if (m_hostButtons[i].mouseOver())
+			{
+				Cursor::RequestStyle(CursorStyle::Hand);
+			}
+			
+			if (m_hostButtons[i].leftClicked())
+			{
+				// ホストに接続
+				m_selectedHostIndex = static_cast<int32>(i);
+				const HostInfo& host = hosts[i];
+				
+				Console << U"[クライアント] ホストに接続中: " << host.hostName;
+				
+				if (m_multiplayer->connect(host.address, host.port))
+				{
+					m_isHost = false;
+					m_viewMode = ViewMode::Waiting;
+					Console << U"[クライアント] 接続開始";
+				}
+				else
+				{
+					Console << U"[クライアント] 接続失敗";
+				}
+			}
+		}
+		
+		// 戻るボタン
+		m_backTr.update(m_backButton.mouseOver());
+		if (m_backButton.mouseOver())
+		{
+			Cursor::RequestStyle(CursorStyle::Hand);
+		}
+		
+		if (m_backButton.leftClicked())
+		{
+			m_hostDiscovery->stop();
+			m_viewMode = ViewMode::Menu;
+			m_hostButtons.clear();
+			m_hostButtonTransitions.clear();
+		}
+		
+		return;
+	}
 
+	// メインメニュー
     m_hostTr.update(m_hostButton.mouseOver());
     m_joinTr.update(m_joinButton.mouseOver());
     m_backTr.update(m_backButton.mouseOver());
@@ -99,52 +172,30 @@ void Matching::update()
 
     if (m_hostButton.leftClicked())
     {
-		// ホストとして開始（全てのネットワークインターフェースでリッスン）
-		m_multiplayer->startHost(12345);
-		m_isHost = true;
-		m_isWaitingForConnection = true;
+		// 利用可能なポートを自動検索
+		auto port = HostDiscovery::findAvailablePort();
+		if (!port)
+		{
+			Console << U"[エラー] 利用可能なポートが見つかりません";
+			return;
+		}
 		
-		Console << U"[ホスト] ポート12345で接続待機中...";
-		Console << U"[ホスト] 自分のIPアドレスを相手に伝えてください";
+		m_gamePort = *port;
+		
+		// ホストとして開始
+		m_multiplayer->startHost(m_gamePort);
+		m_isHost = true;
+		m_viewMode = ViewMode::Waiting;
+		
+		Console << U"[ホスト] ポート" << m_gamePort << U"で接続待機中...";
     }
     else if (m_joinButton.leftClicked())
     {
-		// クライアントとして接続（入力されたIPアドレスを使用）
-		Console << U"[クライアント] " << m_ipInput.text << U":12345 に接続中...";
+		// ホスト検索開始
+		m_hostDiscovery->startSearching();
+		m_viewMode = ViewMode::HostList;
 		
-		// Parse IP address (例: "192.168.1.100")
-		Array<String> parts = m_ipInput.text.split(U'.');
-		if (parts.size() == 4)
-		{
-			try
-			{
-				uint8 a = Parse<uint8>(parts[0]);
-				uint8 b = Parse<uint8>(parts[1]);
-				uint8 c = Parse<uint8>(parts[2]);
-				uint8 d = Parse<uint8>(parts[3]);
-				
-				s3d::IPv4Address addr{ a, b, c, d };
-				
-				if (m_multiplayer->connect(addr, 12345))
-				{
-					m_isHost = false;
-					m_isWaitingForConnection = true;
-					Console << U"[クライアント] 接続開始";
-				}
-				else
-				{
-					Console << U"[クライアント] 接続失敗";
-				}
-			}
-			catch (...)
-			{
-				Console << U"[クライアント] IPアドレスのパースに失敗";
-			}
-		}
-		else
-		{
-			Console << U"[クライアント] IPアドレスが無効です (形式: 192.168.1.100)";
-		}
+		Console << U"[クライアント] ホスト検索中...";
     }
     else if (m_backButton.leftClicked())
     {
@@ -173,44 +224,95 @@ void Matching::draw() const
         const ScopedRenderTarget2D rt{ m_sceneRT };
         m_sceneRT.clear(ColorF{ 0.2, 0.2, 0.2 });
 
-		if (m_isWaitingForConnection)
+		if (m_viewMode == ViewMode::Waiting)
 		{
+			// 接続待機中
 			FontAsset(U"TitleFont")(m_isHost ? U"接続待機中..." : U"接続中...")
 				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 72, Vec2{ 400, 200 });
 			
-			// ホストの場合、IPアドレス確認方法を表示
+			const Font& bold = FontAsset(U"Bold");
+			
 			if (m_isHost)
 			{
-				const Font& bold = FontAsset(U"Bold");
-				bold(U"相手に伝える情報:").drawAt(24, Vec2{ 400, 280 }, ColorF{ 0.8 });
-				bold(U"ポート番号: 12345").drawAt(28, Vec2{ 400, 320 }, ColorF{ 1.0, 1.0, 0.5 });
-				bold(U"IPアドレスの確認方法:").drawAt(20, Vec2{ 400, 360 }, ColorF{ 0.7 });
-				bold(U"Windowsキー + R → 'cmd' → 'ipconfig'").drawAt(18, Vec2{ 400, 390 }, ColorF{ 0.6 });
-				bold(U"「IPv4アドレス」を相手に伝えてください").drawAt(18, Vec2{ 400, 415 }, ColorF{ 0.6 });
+				bold(U"相手の接続を待っています...").drawAt(28, Vec2{ 400, 280 }, ColorF{ 0.8 });
+				bold(U"同じネットワーク内の相手がホストを検索すると自動で表示されます").drawAt(20, Vec2{ 400, 320 }, ColorF{ 0.6 });
+			}
+			else
+			{
+				bold(U"ホストに接続しています...").drawAt(28, Vec2{ 400, 280 }, ColorF{ 0.8 });
 			}
 			
 			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
-			const Font& bold = FontAsset(U"Bold");
 			bold(U"キャンセル").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
+		}
+		else if (m_viewMode == ViewMode::HostList)
+		{
+			// ホストリスト表示
+			FontAsset(U"TitleFont")(U"ホスト選択")
+				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 60, Vec2{ 400, 100 });
+			
+			const Font& bold = FontAsset(U"Bold");
+			const auto& hosts = m_hostDiscovery->getDiscoveredHosts();
+			
+			if (m_hostDiscovery->isSearching())
+			{
+				// 検索中
+				bold(U"ネットワークをスキャン中...").drawAt(28, Vec2{ 400, 220 }, ColorF{ 0.7 });
+				
+				// 進捗バー
+				const double progress = m_hostDiscovery->getProgress();
+				RectF{ 200, 260, 400, 20 }.draw(ColorF{ 0.2 });
+				RectF{ 200, 260, 400 * progress, 20 }.draw(ColorF{ 0.5, 0.8, 1.0 });
+				bold(Format(progress * 100, U"F0") + U"%").drawAt(20, Vec2{ 400, 270 }, ColorF{ 1.0 });
+				
+				bold(Format(hosts.size()) + U"個のホストを発見").drawAt(24, Vec2{ 400, 310 }, ColorF{ 0.6 });
+			}
+			else
+			{
+				// 検索完了
+				if (hosts.isEmpty())
+				{
+					bold(U"ホストが見つかりませんでした").drawAt(28, Vec2{ 400, 250 }, ColorF{ 0.7 });
+					bold(U"相手がホストとして待機しているか確認してください").drawAt(20, Vec2{ 400, 290 }, ColorF{ 0.5 });
+				}
+				else
+				{
+					bold(U"接続するホストを選択してください:").drawAt(24, Vec2{ 400, 150 }, ColorF{ 0.8 });
+				}
+			}
+			
+			// ホストリストを表示
+			if (!hosts.isEmpty())
+			{
+				for (size_t i = 0; i < Min(m_hostButtons.size(), hosts.size()); ++i)
+				{
+					const auto& host = hosts[i];
+					const auto& button = m_hostButtons[i];
+					const auto& transition = m_hostButtonTransitions[i];
+					
+					button.draw(ColorF{ 0.3, 0.5, 0.8, 0.3 + 0.3 * transition.value() }).drawFrame(2, ColorF{ 0.5, 0.7, 1.0 });
+					
+					// ホスト名を表示
+					bold(host.hostName).drawAt(28, button.center(), ColorF{ 1.0 });
+				}
+			}
+			
+			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
+			bold(U"戻る").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
 		}
 		else
 		{
+			// メインメニュー
 			FontAsset(U"TitleFont")(U"オンライン対戦")
 				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 72, Vec2{ 400, 150 });
-
-			// IP入力フィールドを表示（参加する用）
-			const Font& bold = FontAsset(U"Bold");
-			bold(U"接続先IPアドレス (例: 192.168.1.100):").drawAt(20, Vec2{ 400, 205 }, ColorF{ 0.8 });
-			
-			// IP入力（参加ボタンを押す前のみ編集可能）
-			SimpleGUI::TextBox(const_cast<s3d::TextEditState&>(m_ipInput), Vec2{ 200, 220 }, 400);
 
 			m_hostButton.draw(ColorF{ 1.0, m_hostTr.value() }).drawFrame(2);
 			m_joinButton.draw(ColorF{ 1.0, m_joinTr.value() }).drawFrame(2);
 			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
 
+			const Font& bold = FontAsset(U"Bold");
 			bold(U"ホストとして開始").drawAt(28, m_hostButton.center(), ColorF{ 0.1 });
-			bold(U"参加する").drawAt(28, m_joinButton.center(), ColorF{ 0.1 });
+			bold(U"ホストを検索").drawAt(28, m_joinButton.center(), ColorF{ 0.1 });
 			bold(U"ロビーに戻る").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
 		}
     }
