@@ -1,6 +1,8 @@
 # pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../network/MultiplayerManager.hpp"
+# include "../network/HostDiscovery.hpp"
 
 // 待機（マッチング）シーン
 class Matching : public App::Scene
@@ -15,11 +17,40 @@ public:
 
 private:
 
-	RoundRect m_startButton{ Arg::center(400, 360), 300, 60, 8 };
+	enum class ViewMode
+	{
+		Menu,          // メインメニュー
+		HostList,      // ホストリスト表示
+		Waiting        // 接続待機中
+	};
+
+	ViewMode m_viewMode = ViewMode::Menu;
+	
+	// ヘルパー関数
+	IPv4Address detectLocalIPForDisplay();
+
+	RoundRect m_hostButton{ Arg::center(400, 280), 300, 60, 8 };
+	RoundRect m_joinButton{ Arg::center(400, 360), 300, 60, 8 };
 	RoundRect m_backButton{ Arg::center(400, 440), 300, 60, 8 };
 
-	Transition m_startTr{ 0.4s, 0.2s };
+	Transition m_hostTr{ 0.4s, 0.2s };
+	Transition m_joinTr{ 0.4s, 0.2s };
 	Transition m_backTr{ 0.4s, 0.2s };
+	
+	// ネットワーク関連
+	std::shared_ptr<MultiplayerManager> m_multiplayer;
+	std::unique_ptr<HostDiscovery> m_hostDiscovery;
+	bool m_isHost = false;
+	uint16 m_gamePort = 12345;
+	
+	// IP入力用
+	TextEditState m_ipInputState;
+	String m_displayIP;  // ホスト側で表示するIP
+	
+	// ホストリスト用（一時的に無効化）
+	Array<RoundRect> m_hostButtons;
+	Array<Transition> m_hostButtonTransitions;
+	int32 m_selectedHostIndex = -1;
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;

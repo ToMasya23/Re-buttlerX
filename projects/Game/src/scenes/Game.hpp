@@ -6,8 +6,10 @@
 # include "../game/BattleState.hpp"
 # include "../game/FaceTextures.hpp"
 # include "../game/CardDeck.hpp"
+# include "../network/MultiplayerManager.hpp"
+# include "../network/BattleMessages.hpp"
 
-// ゲームシーン（PvE バトル）
+// ゲームシーン（PvE / PvP バトル）
 class Game : public App::Scene
 {
 public:
@@ -19,7 +21,7 @@ public:
 	void draw() const override;
 
 private:
-    // ---- バトル状態 ----
+    // ---- バトル状態（PvE/PvP共通） ----
     BattleState m_state;
     FaceTextures m_faces;
     CardDeck m_deck;
@@ -27,6 +29,13 @@ private:
 	// ---- キャラクタ表示用テクスチャ ----
 	s3d::Texture m_texPlayer;
 	s3d::Texture m_texEnemy;
+
+	// ===== オンライン対戦用 =====
+	std::shared_ptr<MultiplayerManager> m_multiplayer;
+	bool m_isOnlineMode = false;
+	bool m_isHost = false;
+	bool m_isMyTurn = false;
+	uint32 m_turnNumber = 0;
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;
@@ -41,6 +50,11 @@ private:
 
     // ユーティリティ
     void finishBattleIfNeeded();
+    
+    // オンライン対戦用ヘルパー
+    void handleNetworkMessages();
+    void sendGameStateSync();
+    void sendPlayerAction(ActionType action);
 };
 
 
