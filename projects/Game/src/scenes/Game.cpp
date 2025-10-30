@@ -13,6 +13,13 @@ Game::Game(const InitData& init)
     m_texMagao = s3d::Texture{ U"assets/ui/faces/magao.png" };
     m_texCloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
     m_texCrying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+
+	// カード定義を読み込み、初期4枚を抽選
+	loadCardsFromJSON();
+	if (hasCards())
+	{
+		refillRandomCards();
+	}
 }
 
 const s3d::Texture& Game::selectFaceTexture(int crazyPercent) const
@@ -43,6 +50,9 @@ void Game::update()
 		m_paused = (not m_paused);
 		return;
 	}
+
+    // 使用後のクールダウン掃除
+    cleanupCooldowns();
 
     if (m_paused)
     {
@@ -102,11 +112,33 @@ void Game::update()
 			}
 			else if (m_nextAction == NextAction::BackToSelection)
 			{
-				// そのまま選択に戻る
+				// そのまま選択に戻る（使用カードを1枚だけ置き換え）
+				replaceUsedCard();
 			}
 			m_nextAction = NextAction::None;
 		}
 		return;
+	}
+
+    // 念のため：待機解除後に未置換のまま残っていたらここで置換
+    if (m_lastUsedSlot >= 0)
+    {
+        replaceUsedCard();
+    }
+
+	// ---- カード補充（起動直後など空のとき） ----
+	if (m_currentCards.isEmpty() && hasCards())
+	{
+		refillRandomCards();
+	}
+
+	// 詠唱は使用しない（即時反映）
+
+	// インターバル完了で再抽選（メッセージ待機中は復帰後に抽選）
+	if (m_inInterval && (m_intervalTimer.sF() >= IntervalSec) && !m_waitingForAcknowledge && !m_casting)
+	{
+		m_inInterval = false;
+		refillRandomCards();
 	}
 
 	// ---- PvE バトル更新 ----
@@ -129,11 +161,29 @@ void Game::update()
         Cursor::RequestStyle(CursorStyle::Hand);
     }
 
-    // 攻撃可否（防御中・待機中・コスト不足で不可）
+    // 攻撃可否（防御中・待機中・インターバル中・コスト不足で不可）
     if (attackBtn1.leftClicked())
     {
-        if (canAttack(U"攻撃1") && trySpendCost(10))
-            handlePlayerAttack(Damage1);
+        const bool hasCard = (m_currentCards.size() > 0);
+        if (hasCard)
+        {
+            const CardSpec& c = m_currentCards[0];
+            if (canAttack(U"攻撃1") && trySpendCost(c.cost))
+            {
+                // 即時攻撃へ反映、インターバル開始
+                handlePlayerAttack(slotDamage(0));
+                // 直前のスロットとカードを記録し、クールダウン開始
+                m_lastUsedSlot = 0;
+                m_lastUsedCardId = c.id;
+                m_cardCooldowns << CardCooldown{ c.id };
+            }
+            else
+            {
+                m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -143,8 +193,24 @@ void Game::update()
     }
     else if (attackBtn2.leftClicked())
     {
-        if (canAttack(U"攻撃2") && trySpendCost(10))
-            handlePlayerAttack(Damage2);
+        const bool hasCard = (m_currentCards.size() > 1);
+        if (hasCard)
+        {
+            const CardSpec& c = m_currentCards[1];
+            if (canAttack(U"攻撃2") && trySpendCost(c.cost))
+            {
+                handlePlayerAttack(slotDamage(1));
+                m_lastUsedSlot = 1;
+                m_lastUsedCardId = c.id;
+                m_cardCooldowns << CardCooldown{ c.id };
+            }
+            else
+            {
+                m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -154,8 +220,24 @@ void Game::update()
     }
     else if (attackBtn3.leftClicked())
     {
-        if (canAttack(U"攻撃3") && trySpendCost(10))
-            handlePlayerAttack(Damage1 + 5);
+        const bool hasCard = (m_currentCards.size() > 2);
+        if (hasCard)
+        {
+            const CardSpec& c = m_currentCards[2];
+            if (canAttack(U"攻撃3") && trySpendCost(c.cost))
+            {
+                handlePlayerAttack(slotDamage(2));
+                m_lastUsedSlot = 2;
+                m_lastUsedCardId = c.id;
+                m_cardCooldowns << CardCooldown{ c.id };
+            }
+            else
+            {
+                m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -165,8 +247,24 @@ void Game::update()
     }
     else if (attackBtn4.leftClicked())
     {
-        if (canAttack(U"攻撃4") && trySpendCost(10))
-            handlePlayerAttack(Damage2 + 10);
+        const bool hasCard = (m_currentCards.size() > 3);
+        if (hasCard)
+        {
+            const CardSpec& c = m_currentCards[3];
+            if (canAttack(U"攻撃4") && trySpendCost(c.cost))
+            {
+                handlePlayerAttack(slotDamage(3));
+                m_lastUsedSlot = 3;
+                m_lastUsedCardId = c.id;
+                m_cardCooldowns << CardCooldown{ c.id };
+            }
+            else
+            {
+                m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
+                m_waitingForAcknowledge = true;
+                m_nextAction = NextAction::BackToSelection;
+            }
+        }
         else
         {
             m_battleMessage = m_defending ? U"防御中は攻撃できない！" : U"コスト不足！";
@@ -293,14 +391,33 @@ void Game::draw() const
         const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
         const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
         const ColorF actionBg{ 1.0 };
-        attackBtn1.draw(actionBg).drawFrame(2);
-        attackBtn2.draw(actionBg).drawFrame(2);
-        attackBtn3.draw(actionBg).drawFrame(2);
-        attackBtn4.draw(actionBg).drawFrame(2);
-        bold(U"攻撃1").drawAt(24, attackBtn1.center(), ColorF{ 0.1 });
-        bold(U"攻撃2").drawAt(24, attackBtn2.center(), ColorF{ 0.1 });
-        bold(U"攻撃3").drawAt(24, attackBtn3.center(), ColorF{ 0.1 });
-        bold(U"攻撃4").drawAt(24, attackBtn4.center(), ColorF{ 0.1 });
+        const bool disabledAll = (m_waitingForAcknowledge || m_defending);
+
+        auto drawSlot = [&](const RoundRect& rr, int slot)
+        {
+            const bool hasCurrent = (slot < static_cast<int>(m_currentCards.size()));
+            const bool hasLast = (!hasCurrent && (slot < static_cast<int>(m_lastDisplayedCards.size())));
+            const bool hasAny = hasCurrent || hasLast;
+            const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
+            rr.draw(base).drawFrame(2);
+			String title;
+			if (hasAny)
+			{
+				const CardSpec& c = hasCurrent ? m_currentCards[slot] : m_lastDisplayedCards[slot];
+				title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+			}
+			else
+			{
+				title = U"攻撃{}"_fmt(slot + 1);
+			}
+            const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
+            bold(title).drawAt(20, rr.center(), txt);
+        };
+
+        drawSlot(attackBtn1, 0);
+        drawSlot(attackBtn2, 1);
+        drawSlot(attackBtn3, 2);
+        drawSlot(attackBtn4, 3);
         // 逃げる（右端）
         escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }).drawFrame(2);
         bold(U"逃げる").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
@@ -317,6 +434,8 @@ void Game::draw() const
         barBG.draw(ColorF{ 0.85 });
         barFG.draw(blocked ? ColorF{ 0.6 } : ColorF{ 0.2, 0.6, 1.0 });
         FontAsset(U"Bold")(U"COST {}/100"_fmt(cost)).draw(20, Vec2{ costPanel.x + 12, costPanel.y + 10 }, ColorF{ 0.1 });
+
+        // デバッグ表示は削除済み
 
         // 左下プレイヤーパネル
         const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
@@ -455,7 +574,7 @@ bool Game::isRegenBlocked() const
 bool Game::canAttack(const String& label) const
 {
     (void)label; // ラベル長は使用しない（コストは呼び出し側で判定）
-    if (m_defending || m_waitingForAcknowledge)
+    if (m_defending || m_waitingForAcknowledge || m_casting || m_inInterval)
     {
         return false;
     }
@@ -494,4 +613,239 @@ ColorF Game::hpColor(int hp, int maxHP)
 	}
 }
 
+
+
+// ---- カード関連 ----
+void Game::loadCardsFromJSON()
+{
+    // 複数候補パスから順にロード（assets 配下の配置差異に対応）
+    const Array<FilePath> candidates = {
+        U"assets/data/cards.json",
+        U"App/assets/data/cards.json",
+        U"../App/assets/data/cards.json",
+        U"../../App/assets/data/cards.json",
+    };
+    JSON json;
+    for (const auto& p : candidates)
+    {
+        if (!FileSystem::Exists(p))
+        {
+            continue;
+        }
+        TextReader tr{ p };
+        if (!tr)
+        {
+            continue;
+        }
+        const String s = tr.readAll();
+        json = JSON::Parse(s);
+        if (json)
+        {
+            break;
+        }
+    }
+	if (not json || !json.isObject())
+	{
+        // フォールバック（固定4枚）
+		m_allCards = {
+			CardSpec{ U"default_1", U"攻撃1", 10, 0.0, 1.0 },
+			CardSpec{ U"default_2", U"攻撃2", 10, 0.0, 1.0 },
+			CardSpec{ U"default_3", U"攻撃3", 10, 0.0, 1.0 },
+			CardSpec{ U"default_4", U"攻撃4", 10, 0.0, 1.0 },
+		};
+		return;
+	}
+
+	const JSON cardsNode = json[U"cards"];
+	if (!cardsNode || !cardsNode.isArray())
+	{
+		m_allCards = {
+			CardSpec{ U"default_1", U"攻撃1", 10, 0.0, 1.0 },
+			CardSpec{ U"default_2", U"攻撃2", 10, 0.0, 1.0 },
+			CardSpec{ U"default_3", U"攻撃3", 10, 0.0, 1.0 },
+			CardSpec{ U"default_4", U"攻撃4", 10, 0.0, 1.0 },
+		};
+		return;
+	}
+
+	Array<CardSpec> loaded;
+	for (const auto& jc : cardsNode.arrayView())
+	{
+		if (!jc.isObject())
+		{
+			continue;
+		}
+		CardSpec s;
+		if (jc[U"id"].isString())
+			s.id = jc[U"id"].getString();
+		else
+			s.id = U"";
+		if (jc[U"name"].isString())
+			s.name = jc[U"name"].getString();
+		else
+			s.name = U"";
+		if (jc[U"cost"].isNumber())
+			s.cost = jc[U"cost"].get<int32>();
+		else
+			s.cost = 0;
+		if (jc[U"delay"].isNumber())
+			s.delaySec = static_cast<double>(jc[U"delay"].get<int32>());
+		else
+			s.delaySec = 0.0;
+		if (jc[U"weight"].isNumber())
+			s.weight = jc[U"weight"].get<double>();
+		else
+			s.weight = 1.0;
+		loaded << s;
+	}
+	if (loaded.isEmpty())
+	{
+		// セーフティ
+		loaded << CardSpec{ U"fallback", U"攻撃", 10, 0.0, 1.0 };
+	}
+	m_allCards = std::move(loaded);
+}
+
+void Game::refillRandomCards()
+{
+	m_currentCards.clear();
+	if (m_allCards.isEmpty()) return;
+
+	// 重み付き・重複なしで最大4枚抽選
+	Array<int32> indices(m_allCards.size());
+	for (size_t i = 0; i < indices.size(); ++i) indices[i] = static_cast<int32>(i);
+
+	const int k = Min<int>(4, static_cast<int>(indices.size()));
+	for (int pick = 0; pick < k; ++pick)
+	{
+		double sum = 0.0;
+		for (const auto idx : indices)
+		{
+			sum += Max(0.0, m_allCards[idx].weight);
+		}
+		int chosenLocal = 0;
+		if (sum <= 0.0)
+		{
+			chosenLocal = Random(0, static_cast<int>(indices.size()) - 1);
+		}
+		else
+		{
+			double r = Random(0.0, sum);
+			double acc = 0.0;
+			for (int i = 0; i < static_cast<int>(indices.size()); ++i)
+			{
+				acc += Max(0.0, m_allCards[indices[i]].weight);
+				if (r <= acc)
+				{
+					chosenLocal = i;
+					break;
+				}
+    m_lastDisplayedCards = m_currentCards;
+			}
+		}
+		const int32 chosenIndex = indices[chosenLocal];
+		m_currentCards << m_allCards[chosenIndex];
+		indices.remove_at(chosenLocal);
+	}
+}
+
+int32 Game::slotDamage(int slotIndex) const
+{
+	switch (slotIndex)
+	{
+	case 0: return Damage1;
+	case 1: return Damage2;
+	case 2: return Damage1 + 5;
+	case 3: return Damage2 + 10;
+	default: return Damage1;
+	}
+}
+
+void Game::cleanupCooldowns()
+{
+    // 有効なものだけ残す
+    m_cardCooldowns.remove_if([&](const CardCooldown& cd){ return cd.timer.sF() >= PerCardCooldownSec; });
+}
+
+Optional<Game::CardSpec> Game::pickRandomCardExcluding(const Array<String>& excludeIds) const
+{
+    Array<int32> candidates;
+    candidates.reserve(m_allCards.size());
+    for (int32 i = 0; i < static_cast<int32>(m_allCards.size()); ++i)
+    {
+        const auto& c = m_allCards[i];
+        // 除外ID
+        if (excludeIds.includes(c.id)) continue;
+        // クールダウン中は除外
+        bool onCD = false;
+        for (const auto& cd : m_cardCooldowns)
+        {
+            if (cd.id == c.id && cd.timer.sF() < PerCardCooldownSec) { onCD = true; break; }
+        }
+        if (onCD) continue;
+        candidates << i;
+    }
+    if (candidates.isEmpty())
+    {
+        return none;
+    }
+    double sum = 0.0;
+    for (const auto idx : candidates) sum += Max(0.0, m_allCards[idx].weight);
+    if (sum <= 0.0)
+    {
+        const int r = Random(0, static_cast<int>(candidates.size()) - 1);
+        return m_allCards[candidates[r]];
+    }
+    double r = Random(0.0, sum);
+    double acc = 0.0;
+    for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+    {
+        acc += Max(0.0, m_allCards[candidates[i]].weight);
+        if (r <= acc)
+        {
+            return m_allCards[candidates[i]];
+        }
+    }
+    return m_allCards[candidates.back()];
+}
+
+void Game::replaceUsedCard()
+{
+    if (m_lastUsedSlot < 0 || m_lastUsedSlot >= static_cast<int32>(m_currentCards.size()))
+    {
+        return;
+    }
+    // 現在場にあるカード（使用スロット以外）と直前使用カードを除外
+    Array<String> exclude;
+    exclude << m_lastUsedCardId;
+    for (int i = 0; i < static_cast<int>(m_currentCards.size()); ++i)
+    {
+        if (i == m_lastUsedSlot) continue;
+        exclude << m_currentCards[i].id;
+    }
+    Optional<CardSpec> picked = pickRandomCardExcluding(exclude);
+    if (!picked)
+    {
+        // フォールバック：クールダウンを無視し、場にあるカードと直前使用カードのみ除外
+        Array<int32> candidates;
+        for (int32 i = 0; i < static_cast<int32>(m_allCards.size()); ++i)
+        {
+            if (exclude.includes(m_allCards[i].id)) continue;
+            candidates << i;
+        }
+        if (!candidates.isEmpty())
+        {
+            const int r = Random(0, static_cast<int>(candidates.size()) - 1);
+            picked = m_allCards[candidates[r]];
+        }
+    }
+    if (picked)
+    {
+        m_currentCards[m_lastUsedSlot] = *picked;
+        m_lastDisplayedCards = m_currentCards;
+    }
+    // 置き換え後、リセット
+    m_lastUsedSlot = -1;
+    m_lastUsedCardId.clear();
+}
 

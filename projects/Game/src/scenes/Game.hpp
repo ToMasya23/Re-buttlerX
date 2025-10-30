@@ -89,6 +89,48 @@ private:
 	void addCrazy(bool targetIsEnemy, int32 delta);
 	static ColorF hpColor(int hp, int maxHP);
     const s3d::Texture& selectFaceTexture(int crazyPercent) const;
+
+	// ---- カード関連（cards.json） ----
+	struct CardSpec
+	{
+		String id;
+		String name;
+		int32 cost = 0;       // 使用時コスト
+		double delaySec = 0;   // 詠唱時間（秒）
+		double weight = 1.0;   // 抽選重み
+	};
+
+	Array<CardSpec> m_allCards;      // 全カード
+	Array<CardSpec> m_currentCards;  // 現在表示中（最大4）
+	Array<CardSpec> m_lastDisplayedCards; // 直前に表示していた4枚（インターバル中の表示用）
+
+	// 直前に使用したスロットとカードID
+	int32 m_lastUsedSlot = -1;
+	String m_lastUsedCardId;
+
+	// 使用後の一時的な出現禁止（3秒）
+	struct CardCooldown { String id; Stopwatch timer{ StartImmediately::Yes }; };
+	Array<CardCooldown> m_cardCooldowns;
+	static constexpr double PerCardCooldownSec = 3.0;
+
+	// 詠唱＆リフィル制御
+	bool m_casting = false;
+	double m_currentCastDurationSec = 0.0;
+	Stopwatch m_castTimer{ StartImmediately::No };
+	int32 m_pendingDamage = 0; // 詠唱完了後に与えるダメージ
+
+	bool m_inInterval = false;
+	Stopwatch m_intervalTimer{ StartImmediately::No };
+	static constexpr double IntervalSec = 3.0;
+
+	// カード操作ヘルパー
+	void loadCardsFromJSON();
+	void refillRandomCards();
+	bool hasCards() const { return (not m_allCards.empty()); }
+	int32 slotDamage(int slotIndex) const; // スロットに紐づく固定ダメージ
+	void cleanupCooldowns();
+	Optional<CardSpec> pickRandomCardExcluding(const Array<String>& excludeIds) const;
+	void replaceUsedCard();
 };
 
 
