@@ -43,6 +43,13 @@ Lobby::Lobby(const InitData& init)
 	mIconPVE = s3d::Texture{ U"assets/ui/PvE.png", TextureDesc::Unmipped };
 
 	recalcLayout(Scene::Size());
+
+	AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
+}
+
+Lobby::~Lobby() {
+	// 离开 Lobby 停止 BGM（或在下个场景里直接播放新的也行）
+	AudioManager::instance().stopBGM();
 }
 
 void Lobby::recalcLayout(const Size& size) {

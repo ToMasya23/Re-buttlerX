@@ -1,6 +1,7 @@
 ﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../tools/AudioManager.hpp"
 
 namespace UI {
 	inline constexpr s3d::ColorF Bg{ 0.975, 0.965, 0.985 };
@@ -51,6 +52,8 @@ class Lobby : public App::Scene
 public:
 
 	Lobby(const InitData& init);
+
+	~Lobby();
 
 	void update() override;
 
