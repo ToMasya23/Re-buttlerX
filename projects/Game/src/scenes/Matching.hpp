@@ -43,7 +43,11 @@ private:
 	bool m_isHost = false;
 	uint16 m_gamePort = 12345;
 	
-	// ホストリスト用
+	// IP入力用
+	TextEditState m_ipInputState;
+	String m_displayIP;  // ホスト側で表示するIP
+	
+	// ホストリスト用（一時的に無効化）
 	Array<RoundRect> m_hostButtons;
 	Array<Transition> m_hostButtonTransitions;
 	int32 m_selectedHostIndex = -1;
