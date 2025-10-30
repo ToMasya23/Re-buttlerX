@@ -618,13 +618,18 @@ void Game::handleNetworkMessages()
 	if (!m_multiplayer)
 		return;
 
-	auto msgType = m_multiplayer->peekMessageType();
-	if (!msgType)
-		return;
-
-	switch (*msgType)
+	// 全てのメッセージを処理（キューが空になるまで）
+	while (true)
 	{
-	case MessageType::PlayerAction:
+		auto msgType = m_multiplayer->peekMessageType();
+		if (!msgType)
+			break;  // メッセージがなければ終了
+
+		Console << U"[handleNetworkMessages] メッセージタイプ: " << (int)*msgType;
+
+		switch (*msgType)
+		{
+		case MessageType::PlayerAction:
 		{
 			auto msg = m_multiplayer->receive<PlayerActionMessage>();
 			if (msg)
@@ -729,8 +734,12 @@ void Game::handleNetworkMessages()
 		break;
 
 	default:
+		Console << U"[handleNetworkMessages] 未知のメッセージタイプ: " << (int)*msgType;
+		// 未知のメッセージは破棄
+		m_multiplayer->peekMessageType();  // これではキューから削除できない
 		break;
 	}
+	}  // while終了
 }
 
 void Game::sendGameStateSync()
