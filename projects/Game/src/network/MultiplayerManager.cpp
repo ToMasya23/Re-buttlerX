@@ -300,9 +300,10 @@ s3d::Optional<GameStateSyncMessage> MultiplayerManager::receive<GameStateSyncMes
 
 	Console << U"[MultiplayerManager::receive<GameStateSync>] blobサイズ=" << blob.size();
 
-	if (blob.size() < 59)
+	// 正しいサイズ: type(1) + host(4+8+1+8+4=25) + client(4+8+1+8+4=25) + isHostTurn(1) + turnNumber(4) = 56
+	if (blob.size() < 56)
 	{
-		Console << U"[MultiplayerManager::receive<GameStateSync>] エラー: サイズ不足 (必要:59)";
+		Console << U"[MultiplayerManager::receive<GameStateSync>] エラー: サイズ不足 (必要:56)";
 		return s3d::none;
 	}
 
