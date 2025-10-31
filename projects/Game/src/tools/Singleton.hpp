@@ -4,7 +4,7 @@ template <class T>
 class Singleton {
 public:
 	static T& instance() {
-		static T inst;      // C++11 起线程安全
+		static T inst;
 		return inst;
 	}
 	Singleton(const Singleton&) = delete;

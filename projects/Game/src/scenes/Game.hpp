@@ -6,6 +6,7 @@
 # include "../game/BattleState.hpp"
 # include "../game/FaceTextures.hpp"
 # include "../game/CardDeck.hpp"
+# include "../tools/AudioManager.hpp"
 
 // ゲームシーン（PvE バトル）
 class Game : public App::Scene
