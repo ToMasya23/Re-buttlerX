@@ -1,8 +1,8 @@
 ﻿# include <Siv3D.hpp> // Siv3D v0.6.16
 # include "Common.hpp"
-# include "Title.hpp"
-# include "Menu.hpp"
-# include "Battle.hpp"
+# include "scenes/Title.hpp"
+# include "scenes/Menu.hpp"
+# include "scenes/Battle.hpp"
 # include "scenes/Game.hpp"
 // 新規シーン
 # include "scenes/Lobby.hpp"

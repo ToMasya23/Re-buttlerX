@@ -3,6 +3,9 @@ namespace
 {
 	static constexpr int32 Damage1 = 10;
 	static constexpr int32 Damage2 = 20;
+	
+	// 敵がクレイジー状態の時の偽装ラベル候補
+	static const Array<String> FakeActionLabels{ U"防御", U"強化", U"回復", U"挑発" };
 }
 
 Game::Game(const InitData& init)
@@ -79,6 +82,11 @@ void Game::update()
     {
         regenCost(Scene::DeltaTime());
     }
+    // 敵コスト回復（停止条件を考慮）
+    if (!enemyIsRegenBlocked())
+    {
+        enemyRegenCost(Scene::DeltaTime());
+    }
 
     // 防御の継続時間チェック
     if (m_defending && (m_defendTimer.sF() >= DefendDurationSec))
@@ -86,16 +94,17 @@ void Game::update()
         m_defending = false;
     }
 
-    // ---- メッセージ待機中は進行を止める ----
+    // ---- メッセージ待機中は進行を止める（AI 進行も止める） ----
 	if (m_waitingForAcknowledge)
 	{
 		if (advanceInputDown())
 		{
 			m_waitingForAcknowledge = false;
-			if (m_nextAction == NextAction::EnemyCounter)
-			{
-				doEnemyCounterStep();
-			}
+            if (m_nextAction == NextAction::EnemyCounter)
+            {
+                // 連続カウンターは廃止（AI が自律的に行動）
+                //doEnemyCounterStep();
+            }
 			else if (m_nextAction == NextAction::FinishBattle)
 			{
 				finishBattleIfNeeded();
@@ -199,6 +208,12 @@ void Game::update()
             m_nextAction = NextAction::BackToSelection;
         }
     }
+
+    // ---- 敵 AI 更新（詠唱・防御・意思決定）----
+    if (!m_waitingForAcknowledge)
+    {
+        enemyUpdateAI();
+    }
 }
 
 void Game::draw() const
@@ -243,6 +258,25 @@ void Game::draw() const
 			const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 0.9, 0.4, 0.4 };
 			RectF(playerPos, entitySize).rounded(6).draw(playerColor);
 			RectF(enemyPos, entitySize).rounded(6).draw(enemyColor);
+
+            // 敵の状態表示（詠唱・防御）
+            {
+                const Vec2 infoPos = enemyPos + Vec2{ entitySize.x * 0.5, -12 };
+                if (m_enemyCasting)
+                {
+                    const double p = Clamp(m_enemyCastTimeSec > 0.0 ? (m_enemyCastTimer.sF() / m_enemyCastTimeSec) : 0.0, 0.0, 1.0);
+                    const double w = entitySize.x;
+                    const RectF barBG{ enemyPos.x, enemyPos.y - 18, w, 6 };
+                    const RectF barFG{ barBG.x, barBG.y, w * p, 6 };
+                    barBG.draw(ColorF{ 0.2, 0.2, 0.3 });
+                    barFG.draw(ColorF{ 1.0, 0.5, 0.2 });
+                    FontAsset(U"Bold")(U"詠唱中: {}"_fmt(m_enemyDisplayedLabel)).draw(14, infoPos.movedBy(-entitySize.x * 0.5, -16), ColorF{ 0.95 });
+                }
+                else if (m_enemyDefending)
+                {
+                    FontAsset(U"Bold")(U"防御中").draw(14, infoPos.movedBy(-28, -12), ColorF{ 0.95 });
+                }
+            }
 		}
 
 		const Font& bold = FontAsset(U"Bold");
@@ -371,11 +405,12 @@ void Game::handlePlayerAttack(int32 damage)
 	// 次のアクション判定
 	if (m_enemyHP <= 0)
 	{
-		m_nextAction = NextAction::FinishBattle;
+        m_nextAction = NextAction::FinishBattle;
 	}
 	else
 	{
-		m_nextAction = NextAction::EnemyCounter;
+        // 旧カウンター制：AI 自律行動に置換
+        m_nextAction = NextAction::BackToSelection;
 	}
 }
 
@@ -492,6 +527,136 @@ ColorF Game::hpColor(int hp, int maxHP)
 	{
 		return ColorF{ 0.9, 0.3, 0.3 }; // 赤
 	}
+}
+
+// =========================
+// 敵 AI 実装
+// =========================
+void Game::enemyRegenCost(double dt)
+{
+    m_enemyCostValue = Min(100.0, m_enemyCostValue + (EnemyCostRegenPerSec * dt));
+}
+
+bool Game::enemyIsRegenBlocked() const
+{
+    return (m_enemyDefending || m_waitingForAcknowledge);
+}
+
+bool Game::enemyTrySpendCost(int32 amount)
+{
+    if (enemyCost() < amount)
+    {
+        return false;
+    }
+    m_enemyCostValue = Max(0.0, m_enemyCostValue - amount);
+    return true;
+}
+
+void Game::enemyStartDefend()
+{
+    if (m_enemyDefending)
+        return;
+    if (!enemyTrySpendCost(20))
+        return;
+    m_enemyDefending = true;
+    m_enemyDefendTimer.restart();
+    // 軽いメッセージを表示（進行一時停止）
+    m_battleMessage = U"敵は防御体勢に入った！";
+    m_waitingForAcknowledge = true;
+    m_nextAction = NextAction::BackToSelection;
+}
+
+void Game::enemyStartCastAttack(int32 damage, double castSec, const String& label, const String& displayLabel)
+{
+    if (m_enemyCasting)
+        return;
+    // 攻撃コストは仮に 10
+    if (!enemyTrySpendCost(10))
+        return;
+    m_enemyCasting = true;
+    m_enemyPlannedDamage = Max(0, damage);
+    m_enemyCastTimeSec = Max(0.1, castSec);
+    m_enemyPlannedLabel = label;
+    m_enemyDisplayedLabel = displayLabel;
+    m_enemyCastTimer.restart();
+}
+
+void Game::enemyResolveCast()
+{
+    m_enemyCasting = false;
+    const bool playerBlocked = m_defending;
+    const int32 dealt = playerBlocked ? 0 : m_enemyPlannedDamage;
+    m_playerHP = Max(0, m_playerHP - dealt);
+    // 敵の攻撃でプレイヤーのクレイジーが増加
+    addCrazy(false, +20);
+    // 敵はクレイジーを少し発散
+    addCrazy(true, -30);
+    startHitEffect(HitTarget::Player);
+    m_battleMessage = (dealt == 0)
+        ? U"敵の{}は防がれた！0のダメージ！"_fmt(m_enemyPlannedLabel)
+        : U"敵は{}を発動！{}のダメージ！"_fmt(m_enemyPlannedLabel, dealt);
+    m_waitingForAcknowledge = true;
+    m_nextAction = NextAction::BackToSelection;
+}
+
+void Game::enemyUpdateAI()
+{
+    // 防御の継続時間
+    if (m_enemyDefending && (m_enemyDefendTimer.sF() >= DefendDurationSec))
+    {
+        m_enemyDefending = false;
+    }
+
+    // 詠唱中の進行
+    if (m_enemyCasting)
+    {
+        if (m_enemyCastTimer.sF() >= m_enemyCastTimeSec)
+        {
+            enemyResolveCast();
+        }
+        return; // 詠唱中は新規行動しない
+    }
+
+    // 意思決定（簡易ルール）
+    // 低 HP かつコスト充分なら防御優先
+    if (!m_enemyDefending && (m_enemyHP <= 25) && enemyCost() >= 20)
+    {
+        enemyStartDefend();
+        return;
+    }
+
+    // 攻撃：コスト充分、非防御時
+    if (!m_enemyDefending && enemyCost() >= 10)
+    {
+        // ダメージと詠唱時間をクレイジーや乱数で決定
+        int32 dmg = 0;
+        if (m_enemyCrazy < 60)
+        {
+            dmg = Random(8, 16);
+        }
+        else if (m_enemyCrazy < 100)
+        {
+            dmg = Random(12, 22);
+        }
+        else
+        {
+            // クレイジー状態：よりハイリスク/ハイリターン
+            dmg = Random(6, 28);
+        }
+        const double castSec = Random(0.5, 1.4);
+
+        // ラベル（実際と表示）。クレイジー時はあべこべ表示
+        const String realLabel = U"攻撃";
+        String displayLabel = realLabel;
+        if (enemyInCrazy())
+        {
+            // 表示は偽装（例：防御っぽく見せる）
+            displayLabel = FakeActionLabels.choice();
+        }
+
+        enemyStartCastAttack(dmg, castSec, realLabel, displayLabel);
+        return;
+    }
 }
 
 
