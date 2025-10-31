@@ -1,4 +1,4 @@
-# include "Game.hpp"
+﻿# include "Game.hpp"
 # include "../game/BattleLogic.hpp"
 # include "../game/BattleUtils.hpp"
 # include "../tools/NineSlice.hpp"
@@ -50,6 +50,8 @@ Game::Game(const InitData& init)
 	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
 	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
 	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
+
+	AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
 }
 
 void Game::update()
