@@ -207,7 +207,10 @@ void Game::update()
     }
 
     // ---- 敵 AI 更新（詠唱・防御・意思決定）----
-    enemyUpdateAI();
+    if (!m_waitingForAcknowledge)
+    {
+        enemyUpdateAI();
+    }
 }
 
 void Game::draw() const
