@@ -3,6 +3,9 @@ namespace
 {
 	static constexpr int32 Damage1 = 10;
 	static constexpr int32 Damage2 = 20;
+	
+	// 敵がクレイジー状態の時の偽装ラベル候補
+	static const Array<String> FakeActionLabels{ U"防御", U"強化", U"回復", U"挑発" };
 }
 
 Game::Game(const InitData& init)
@@ -648,8 +651,7 @@ void Game::enemyUpdateAI()
         if (enemyInCrazy())
         {
             // 表示は偽装（例：防御っぽく見せる）
-            static const Array<String> fake{ U"防御", U"強化", U"回復", U"挑発" };
-            displayLabel = fake.choice();
+            displayLabel = FakeActionLabels.choice();
         }
 
         enemyStartCastAttack(dmg, castSec, realLabel, displayLabel);
