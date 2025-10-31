@@ -616,13 +616,10 @@ void Game::enemyUpdateAI()
 
     // 意思決定（簡易ルール）
     // 低 HP かつコスト充分なら防御優先
-    if (!m_enemyDefending && (m_enemyHP <= 25) && enemyTrySpendCost(0))
+    if (!m_enemyDefending && (m_enemyHP <= 25) && enemyCost() >= 20)
     {
-        if (enemyCost() >= 20)
-        {
-            enemyStartDefend();
-            return;
-        }
+        enemyStartDefend();
+        return;
     }
 
     // 攻撃：コスト充分、非防御時
