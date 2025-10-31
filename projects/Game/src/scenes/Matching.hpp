@@ -3,6 +3,7 @@
 # include "../ui/PauseTheme.hpp"
 # include "../network/MultiplayerManager.hpp"
 # include "../network/HostDiscovery.hpp"
+# include "../network/UDPDiscovery.hpp"
 
 // 待機（マッチング）シーン
 class Matching : public App::Scene
@@ -19,9 +20,10 @@ private:
 
 	enum class ViewMode
 	{
-		Menu,          // メインメニュー
-		HostList,      // ホストリスト表示
-		Waiting        // 接続待機中
+		Menu,               // メインメニュー
+		PassphraseInput,    // 合言葉入力（ホスト・ゲスト共通）
+		HostList,           // ホストリスト表示
+		Waiting             // 接続待機中
 	};
 
 	ViewMode m_viewMode = ViewMode::Menu;
@@ -40,8 +42,13 @@ private:
 	// ネットワーク関連
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
 	std::unique_ptr<HostDiscovery> m_hostDiscovery;
+	std::unique_ptr<UDPDiscovery> m_udpDiscovery;
 	bool m_isHost = false;
 	uint16 m_gamePort = 12345;
+	
+	// 合言葉入力用
+	TextEditState m_passphraseInputState;
+	String m_passphrase;
 	
 	// IP入力用
 	TextEditState m_ipInputState;

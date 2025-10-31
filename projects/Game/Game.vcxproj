@@ -120,6 +120,8 @@
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\network\MultiplayerManager.cpp" />
     <ClCompile Include="src\network\HostDiscovery.cpp" />
+    <ClCompile Include="src\network\UDPDiscovery.cpp" />
+    <ClCompile Include="src\network\NetworkPlatform_Win.cpp" />
     <ClCompile Include="src\scenes\Title.cpp" />
     <ClCompile Include="src\scenes\Game.cpp" />
     <ClCompile Include="src\scenes\Battle.cpp" />

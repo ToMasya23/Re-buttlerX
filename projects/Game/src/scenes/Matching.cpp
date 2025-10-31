@@ -1,64 +1,29 @@
 # include "Matching.hpp"
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-#endif
+# include "../network/NetworkPlatform.hpp"
 
 Matching::Matching(const InitData& init)
 	: IScene{ init }
 {
 	m_multiplayer = std::make_shared<MultiplayerManager>();
 	m_hostDiscovery = std::make_unique<HostDiscovery>();
+	m_udpDiscovery = std::make_unique<UDPDiscovery>();
 	
 	// IP入力のデフォルト値を設定
 	m_ipInputState.text = U"192.168.1.100";
 	m_ipInputState.cursorPos = m_ipInputState.text.size();
+	
+	// 合言葉入力のデフォルト値を設定
+	m_passphraseInputState.text = U"";
+	m_passphraseInputState.cursorPos = 0;
 }
 
 IPv4Address Matching::detectLocalIPForDisplay()
 {
-#ifdef _WIN32
-	char hostname[256];
-	if (gethostname(hostname, sizeof(hostname)) == SOCKET_ERROR)
+	Array<IPv4Address> localIPs = NetworkPlatform::GetLocalIPAddresses();
+	if (!localIPs.isEmpty())
 	{
-		return IPv4Address{ 127, 0, 0, 1 };
+		return localIPs[0];
 	}
-	
-	struct addrinfo hints = {};
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	
-	struct addrinfo* result = nullptr;
-	if (getaddrinfo(hostname, nullptr, &hints, &result) != 0)
-	{
-		return IPv4Address{ 127, 0, 0, 1 };
-	}
-	
-	for (struct addrinfo* ptr = result; ptr != nullptr; ptr = ptr->ai_next)
-	{
-		if (ptr->ai_family == AF_INET)
-		{
-			struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)ptr->ai_addr;
-			uint32_t addr = ntohl(sockaddr_ipv4->sin_addr.s_addr);
-			
-			uint8 a = (addr >> 24) & 0xFF;
-			uint8 b = (addr >> 16) & 0xFF;
-			uint8 c = (addr >> 8) & 0xFF;
-			uint8 d = (addr >> 0) & 0xFF;
-			
-			if (a != 127)
-			{
-				freeaddrinfo(result);
-				return IPv4Address{ a, b, c, d };
-			}
-		}
-	}
-	
-	freeaddrinfo(result);
-#endif
-	
 	return IPv4Address{ 127, 0, 0, 1 };
 }
 
@@ -114,7 +79,32 @@ void Matching::update()
         return;
     }
 
-	// ホスト検索を更新
+	// UDP Discovery を更新
+	if (m_udpDiscovery)
+	{
+		m_udpDiscovery->update();
+		
+		// クライアント側: ホストが見つかったら自動接続
+		if (m_udpDiscovery->getRole() == UDPDiscovery::Role::Client)
+		{
+			const auto& hosts = m_udpDiscovery->getDiscoveredHosts();
+			if (!hosts.isEmpty() && m_viewMode == ViewMode::PassphraseInput)
+			{
+				// 最初に見つかったホストに接続
+				const auto& host = hosts[0];
+				Console << U"[クライアント] ホスト発見！自動接続開始: " << host.address.str();
+				
+				if (m_multiplayer->connect(host.address, host.port))
+				{
+					m_isHost = false;
+					m_viewMode = ViewMode::Waiting;
+					m_udpDiscovery->stopSearching();
+				}
+			}
+		}
+	}
+	
+	// ホスト検索を更新（旧方式・フォールバック用）
 	if (m_hostDiscovery)
 	{
 		m_hostDiscovery->update();
@@ -147,10 +137,12 @@ void Matching::update()
 			if (m_isHost)
 			{
 				Console << U"[ホスト] クライアントとの接続が確立されました。Game画面に遷移します。";
+			m_udpDiscovery->stopAdvertising();
 			}
 			else
 			{
 				Console << U"[クライアント] ホストとの接続が確立されました。Game画面に遷移します。";
+			m_udpDiscovery->stopSearching();
 			}
 			
 			m_hostDiscovery->stop();
@@ -165,6 +157,8 @@ void Matching::update()
 		{
 			m_multiplayer->disconnect();
 			m_hostDiscovery->stop();
+			m_udpDiscovery->stopAdvertising();
+			m_udpDiscovery->stopSearching();
 			m_viewMode = ViewMode::Menu;
 		}
 		
@@ -172,6 +166,100 @@ void Matching::update()
 		if (m_backButton.mouseOver())
 		{
 			Cursor::RequestStyle(CursorStyle::Hand);
+		}
+		
+		return;
+	}
+	
+	// 合言葉入力モード
+	if (m_viewMode == ViewMode::PassphraseInput)
+	{
+		// テキスト入力の処理
+		m_passphraseInputState.active = true;
+		
+		// TextInputからの入力を取得
+		const String input = TextInput::GetRawInput();
+		
+		// 文字を追加（合言葉は日本語も可能）
+		m_passphraseInputState.text += input;
+		m_passphraseInputState.cursorPos = m_passphraseInputState.text.size();
+		
+		// バックスペース
+		if (KeyBackspace.down() && m_passphraseInputState.cursorPos > 0)
+		{
+			m_passphraseInputState.text.pop_back();
+			m_passphraseInputState.cursorPos--;
+		}
+		
+		// 確定ボタン
+		const s3d::RoundRect confirmButton{ Arg::center(400, 340), 200, 50, 8 };
+		bool confirmHover = confirmButton.mouseOver();
+		
+		if (confirmHover)
+		{
+			Cursor::RequestStyle(CursorStyle::Hand);
+		}
+		
+		// Enterキーでも確定
+		if ((confirmButton.leftClicked() || KeyEnter.down()) && !m_passphraseInputState.text.isEmpty())
+		{
+			m_passphrase = m_passphraseInputState.text;
+			
+			if (m_isHost)
+			{
+				// ホスト: 合言葉で部屋を立てる
+				Console << U"[ホスト] 合言葉設定: " << m_passphrase;
+				
+				// ローカルIPアドレスを取得
+				IPv4Address localIP = detectLocalIPForDisplay();
+				m_displayIP = localIP.str();
+				
+				// TCPサーバー開始
+				m_multiplayer->startHost(m_gamePort);
+				
+				// UDP広告開始
+				if (m_udpDiscovery->startAdvertising(m_passphrase, U"Re-ButtlerX", m_gamePort))
+				{
+					m_viewMode = ViewMode::Waiting;
+					Console << U"[ホスト] 接続待機中... IP: " << m_displayIP;
+				}
+				else
+				{
+					Console << U"[エラー] UDP広告の開始に失敗";
+					m_multiplayer->disconnect();
+					m_viewMode = ViewMode::Menu;
+				}
+			}
+			else
+			{
+				// クライアント: 合言葉でブロードキャスト開始
+				Console << U"[クライアント] 合言葉入力: " << m_passphrase;
+				
+				if (m_udpDiscovery->startSearching(m_passphrase))
+				{
+					Console << U"[クライアント] ホスト検索中...";
+					// ViewModeはPassphraseInputのまま（自動接続処理が行われる）
+				}
+				else
+				{
+					Console << U"[エラー] UDP検索の開始に失敗";
+					m_viewMode = ViewMode::Menu;
+				}
+			}
+		}
+		
+		// 戻るボタン
+		m_backTr.update(m_backButton.mouseOver());
+		if (m_backButton.mouseOver())
+		{
+			Cursor::RequestStyle(CursorStyle::Hand);
+		}
+		
+		if (m_backButton.leftClicked())
+		{
+			m_udpDiscovery->stopAdvertising();
+			m_udpDiscovery->stopSearching();
+			m_viewMode = ViewMode::Menu;
 		}
 		
 		return;
@@ -248,6 +336,7 @@ void Matching::update()
 				}
 				catch (const Error& e)
 				{
+					(void)e;  // 未使用変数（将来のログ出力用に保持）
 					Console << U"[クライアント] IPアドレスの解析に失敗: " << ipText;
 				}
 			}
@@ -287,36 +376,23 @@ void Matching::update()
 
     if (m_hostButton.leftClicked())
     {
-		// 利用可能なポートを自動検索
-		auto port = HostDiscovery::findAvailablePort();
-		if (!port)
-		{
-			Console << U"[エラー] 利用可能なポートが見つかりません";
-			return;
-		}
-		
-		m_gamePort = *port;
-		
-		// ローカルIPアドレスを取得して表示
-		IPv4Address localIP = detectLocalIPForDisplay();
-		m_displayIP = localIP.str();
-		
-		// ホストとして開始
-		m_multiplayer->startHost(m_gamePort);
+		// 合言葉入力モードへ移行（ホスト）
 		m_isHost = true;
-		m_viewMode = ViewMode::Waiting;
+		m_viewMode = ViewMode::PassphraseInput;
+		m_passphraseInputState.text = U"";
+		m_passphraseInputState.cursorPos = 0;
 		
-		Console << U"[ホスト] ローカルIP: " << m_displayIP;
-		Console << U"[ホスト] ポート" << m_gamePort << U"で接続待機中...";
-		Console << U"[ホスト] クライアント側で以下のIPアドレスを入力してください: " << m_displayIP;
+		Console << U"[ホスト] 合言葉入力画面へ";
     }
     else if (m_joinButton.leftClicked())
     {
-		// 手動接続モードに変更
-		m_viewMode = ViewMode::HostList;
+		// 合言葉入力モードへ移行（ゲスト）
+		m_isHost = false;
+		m_viewMode = ViewMode::PassphraseInput;
+		m_passphraseInputState.text = U"";
+		m_passphraseInputState.cursorPos = 0;
 		
-		Console << U"[クライアント] 手動接続モード";
-		Console << U"[クライアント] ホストのIPアドレスを入力してください";
+		Console << U"[ゲスト] 合言葉入力画面へ";
     }
     else if (m_backButton.leftClicked())
     {
@@ -345,7 +421,56 @@ void Matching::draw() const
         const ScopedRenderTarget2D rt{ m_sceneRT };
         m_sceneRT.clear(ColorF{ 0.2, 0.2, 0.2 });
 
-		if (m_viewMode == ViewMode::Waiting)
+		if (m_viewMode == ViewMode::PassphraseInput)
+		{
+			// 合言葉入力画面
+			FontAsset(U"TitleFont")(m_isHost ? U"ホスト：合言葉設定" : U"ゲスト：合言葉入力")
+				.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.1, 0.1 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 60, Vec2{ 400, 100 });
+			
+			const Font& bold = FontAsset(U"Bold");
+			
+			if (m_isHost)
+			{
+				bold(U"部屋を立てるための合言葉を入力してください").drawAt(24, Vec2{ 400, 180 }, ColorF{ 0.8 });
+				bold(U"(ゲスト側も同じ合言葉を入力します)").drawAt(20, Vec2{ 400, 210 }, ColorF{ 0.5 });
+				bold(U"[演出] SNSに投稿する...").drawAt(20, Vec2{ 400, 240 }, ColorF{ 0.3, 0.8, 1.0 });
+			}
+			else
+			{
+				bold(U"ホストが設定した合言葉を入力してください").drawAt(24, Vec2{ 400, 180 }, ColorF{ 0.8 });
+				bold(U"(入力後、自動的にホストを検索します)").drawAt(20, Vec2{ 400, 210 }, ColorF{ 0.5 });
+				bold(U"[演出] 噛みつく！").drawAt(20, Vec2{ 400, 240 }, ColorF{ 1.0, 0.3, 0.3 });
+			}
+			
+			// 合言葉入力ボックス
+			const s3d::RoundRect inputBox{ Arg::center(400, 290), 400, 50, 8 };
+			inputBox.draw(ColorF{ 0.1, 0.1, 0.15 }).drawFrame(3, ColorF{ 0.3, 0.6, 1.0 });
+			
+			// 入力中のテキストを表示
+			const String displayText = m_passphraseInputState.text.isEmpty() ? U"合言葉を入力..." : m_passphraseInputState.text;
+			const ColorF textColor = m_passphraseInputState.text.isEmpty() ? ColorF{ 0.4 } : ColorF{ 1.0 };
+			bold(displayText).drawAt(28, inputBox.center(), textColor);
+			
+			// カーソルを点滅表示
+			if (m_passphraseInputState.active && static_cast<int32>(Scene::Time() * 2) % 2 == 0)
+			{
+				const double textWidth = bold(m_passphraseInputState.text.substr(0, m_passphraseInputState.cursorPos)).region(28).w;
+				const double cursorX = inputBox.center().x - bold(m_passphraseInputState.text).region(28).w / 2 + textWidth;
+				Line{ cursorX, inputBox.center().y - 14, cursorX, inputBox.center().y + 14 }.draw(2, ColorF{ 1.0 });
+			}
+			
+			// 確定ボタン
+			const s3d::RoundRect confirmButton{ Arg::center(400, 340), 200, 50, 8 };
+			const bool confirmHover = confirmButton.mouseOver();
+			const bool canConfirm = !m_passphraseInputState.text.isEmpty();
+			confirmButton.draw(canConfirm ? ColorF{ 0.2, 0.6, 1.0, confirmHover ? 1.0 : 0.8 } : ColorF{ 0.3, 0.3, 0.3 })
+				.drawFrame(2, ColorF{ 1.0 });
+			bold(m_isHost ? U"部屋を立てる" : U"噛みつく！").drawAt(24, confirmButton.center(), canConfirm ? ColorF{ 1.0 } : ColorF{ 0.5 });
+			
+			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);
+			bold(U"戻る").drawAt(28, m_backButton.center(), ColorF{ 0.1 });
+		}
+		else if (m_viewMode == ViewMode::Waiting)
 		{
 			// 接続待機中
 			FontAsset(U"TitleFont")(m_isHost ? U"接続待機中..." : U"接続中...")
@@ -355,18 +480,26 @@ void Matching::draw() const
 			
 			if (m_isHost)
 			{
-				bold(U"相手の接続を待っています...").drawAt(28, Vec2{ 400, 240 }, ColorF{ 0.8 });
-				bold(U"クライアント側で以下のIPアドレスを入力してください:").drawAt(22, Vec2{ 400, 290 }, ColorF{ 0.7 });
+				bold(U"[演出] SNSに投稿しました！").drawAt(24, Vec2{ 400, 230 }, ColorF{ 0.3, 0.8, 1.0 });
+				bold(U"合言葉: " + m_passphrase).drawAt(28, Vec2{ 400, 270 }, ColorF{ 1.0, 1.0, 0.3 });
+				bold(U"相手が噛みつくのを待っています...").drawAt(22, Vec2{ 400, 310 }, ColorF{ 0.7 });
 				
-				// IPアドレスを大きく表示
-				FontAsset(U"TitleFont")(m_displayIP)
-					.drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.2, 0.6, 1.0 }, Vec2{ 2, 2 }, ColorF{ 0.0, 0.5 }), 48, Vec2{ 400, 350 });
-				
-				bold(U"ポート: " + Format(m_gamePort)).drawAt(24, Vec2{ 400, 400 }, ColorF{ 0.6 });
+				// IPアドレスを表示（フォールバック用）
+				bold(U"（手動接続用IP: " + m_displayIP + U"）").drawAt(18, Vec2{ 400, 360 }, ColorF{ 0.5 });
+				bold(U"（ポート: " + Format(m_gamePort) + U"）").drawAt(18, Vec2{ 400, 385 }, ColorF{ 0.5 });
 			}
 			else
 			{
-				bold(U"ホストに接続しています...").drawAt(28, Vec2{ 400, 280 }, ColorF{ 0.8 });
+				if (m_udpDiscovery && m_udpDiscovery->isActive())
+				{
+					bold(U"[演出] 噛みつき中...").drawAt(24, Vec2{ 400, 250 }, ColorF{ 1.0, 0.3, 0.3 });
+					bold(U"合言葉: " + m_passphrase).drawAt(28, Vec2{ 400, 290 }, ColorF{ 1.0, 1.0, 0.3 });
+					bold(U"ホストを探しています...").drawAt(22, Vec2{ 400, 330 }, ColorF{ 0.7 });
+				}
+				else
+				{
+					bold(U"ホストに接続しています...").drawAt(28, Vec2{ 400, 280 }, ColorF{ 0.8 });
+				}
 			}
 			
 			m_backButton.draw(ColorF{ 1.0, m_backTr.value() }).drawFrame(2);

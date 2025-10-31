@@ -417,3 +417,8 @@ gmon.out
 # Siv3D SDK for macOS
 /include/
 /lib/
+
+# Debug files
+log.md
+debug_log_window.ps1
+*.debug.txt

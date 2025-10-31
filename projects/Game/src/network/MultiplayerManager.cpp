@@ -16,9 +16,9 @@ bool MultiplayerManager::startHost(uint16 port)
 	return true;
 }
 
-bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port)
+bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port, double timeoutSeconds)
 {
-	Console << U"[MultiplayerManager] 接続試行 " << address.str() << U":" << port;
+	Console << U"[MultiplayerManager] 接続試行 " << address.str() << U":" << port << U" (timeout=" << timeoutSeconds << U"s)";
 	
 	if (m_client.connect(address, port))
 	{
