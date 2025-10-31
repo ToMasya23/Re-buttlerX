@@ -55,6 +55,27 @@ private:
 	Stopwatch m_hitTimer{ StartImmediately::No };
 	static constexpr double HitDuration = 0.25; // seconds
 
+	// ---- 敵（PvE）用 簡易 AI 状態 ----
+	// コスト（内部は double で管理）
+	double m_enemyCostValue = 100.0; // 0..100
+	static constexpr double EnemyCostRegenPerSec = 1.0; // 1/sec（プレイヤーと同等）
+	int32 enemyCost() const { return Clamp<int32>(Round(m_enemyCostValue), 0, 100); }
+
+	// 防御状態
+	bool m_enemyDefending = false;
+	Stopwatch m_enemyDefendTimer{ StartImmediately::No };
+
+	// 詠唱（攻撃準備）
+	bool m_enemyCasting = false;
+	double m_enemyCastTimeSec = 0.0;
+	Stopwatch m_enemyCastTimer{ StartImmediately::No };
+	int32 m_enemyPlannedDamage = 0;
+	String m_enemyPlannedLabel;          // 実際の効果名称（攻撃/防御 等）
+	String m_enemyDisplayedLabel;        // 表示用（クレイジー時はあべこべ）
+
+	// クレイジー時の挙動（100% 以上で “あべこべ表示” を発動）
+	bool enemyInCrazy() const { return (m_enemyCrazy >= 100); }
+
 	// ---- ポーズ用 ----
 	bool m_paused = false;
 	bool m_pauseAwaitingCapture = false;
@@ -89,6 +110,15 @@ private:
 	void addCrazy(bool targetIsEnemy, int32 delta);
 	static ColorF hpColor(int hp, int maxHP);
     const s3d::Texture& selectFaceTexture(int crazyPercent) const;
+
+	// ---- 敵 AI 用ヘルパー ----
+	void enemyRegenCost(double dt);
+	bool enemyIsRegenBlocked() const;
+	bool enemyTrySpendCost(int32 amount);
+	void enemyUpdateAI();
+	void enemyStartDefend();
+	void enemyStartCastAttack(int32 damage, double castSec, const String& label, const String& displayLabel);
+	void enemyResolveCast();
 };
 
 
