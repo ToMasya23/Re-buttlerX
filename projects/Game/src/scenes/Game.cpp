@@ -479,6 +479,12 @@ private:
 						m_game.replaceUsedCardIfNeeded();
 					}
 				}
+				// クライアント側で自分の防御イベントを受信した場合、防御状態を設定
+				else if (msg->eventType == net::BattleEventType::ClientDefend)
+				{
+					m_game.m_state.defending = true;
+					m_game.m_state.defendTimer.restart();
+				}
 			}
 			else if (type == net::PacketType::BattleEnd)
 			{
@@ -980,7 +986,8 @@ String Game::renderBattleEvent(net::BattleEventType type, int32 primaryValue, in
 void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
-	m_state.enemyHP = Max(0, m_state.enemyHP - damage);
+	const int32 finalDamage = m_remoteDefending ? 0 : damage;
+	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
 	BattleLogic::addCrazy(m_state, true, +20);
 	BattleLogic::addCrazy(m_state, false, -10);
 	m_deck.onUse(slotIndex);
@@ -1015,6 +1022,14 @@ void Game::handleDefend(net::BattleEventType eventType, bool broadcastToClient)
 	{
 		m_state.defending = true;
 		m_state.defendTimer.restart();
+	}
+	else if (eventType == net::BattleEventType::ClientDefend)
+	{
+		if (!m_isHost)
+		{
+			m_state.defending = true;
+			m_state.defendTimer.restart();
+		}
 	}
 
 	const uint32 flags = 0;
@@ -1052,7 +1067,8 @@ void Game::handleEscape(net::BattleEventType eventType, bool broadcastToClient)
 
 void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
-	m_state.playerHP = Max(0, m_state.playerHP - damage);
+	const int32 finalDamage = m_state.defending ? 0 : damage;
+	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
 	BattleLogic::addCrazy(m_state, false, +20);
 
