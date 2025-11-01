@@ -1,9 +1,9 @@
-# include "Title.hpp"
+﻿# include "Title.hpp"
 
 Title::Title(const InitData& init)
 	: IScene{ init }
 {
-
+	AudioManager::instance().startBGM(U"assets/BGM/start.mp3", 0.7);
 }
 
 void Title::update()

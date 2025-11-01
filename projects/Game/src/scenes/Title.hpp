@@ -1,6 +1,7 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
+# include "../tools/AudioManager.hpp"
 
 // タイトルシーン
 class Title : public App::Scene
