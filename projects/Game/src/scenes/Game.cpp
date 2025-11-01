@@ -61,6 +61,14 @@ public:
 	{
 		Game& g = m_game;
 
+		// ===== クレイジーモード発動チェック =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+		}
+
 		const auto& cards = g.m_deck.current();
 
 		auto tryAttack = [&](int slotIndex) -> bool
@@ -137,6 +145,16 @@ public:
 		processClientMessages();
 
 		Game& g = m_game;
+
+		// ===== クレイジーモード発動チェック =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+			g.sendStateSync();
+		}
+
 		const auto& cards = g.m_deck.current();
 
 		// ===== 詠唱完了チェック（ホスト側） =====
@@ -355,6 +373,14 @@ public:
 		Game& g = m_game;
 
 		processIncomingPackets();
+
+		// ===== クレイジーモード発動チェック（クライアント側） =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+		}
 
 		const auto& cards = g.m_deck.current();
 
@@ -587,6 +613,21 @@ void Game::update()
 	updateRemoteDefendState();
 	updateRemoteCost(dt);
 	updateLogs();
+
+	m_deck.updateRefills();
+
+	// ===== クレイジーモード終了チェック =====
+	const double currentTime = Scene::Time();
+	if (BattleLogic::shouldExitCrazyMode(m_state, true, currentTime))
+	{
+		BattleLogic::endCrazyMode(m_state, true);
+		m_deck.exitCrazyMode();
+		pushLog(U"【CRAZY MODE 終了】");
+	}
+	if (BattleLogic::shouldExitCrazyMode(m_state, false, currentTime))
+	{
+		BattleLogic::endCrazyMode(m_state, false);
+	}
 
 	BattleInput input = collectBattleInput();
 
@@ -1071,11 +1112,6 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
 	BattleLogic::addCrazy(m_state, false, +20);
-
-	if (slotIndex >= 0 && slotIndex < 4)
-	{
-		m_deck.onUse(slotIndex);
-	}
 
 	const uint32 flags = net::EventFlagHitPlayer;
 	emitLocalEvent(eventType, damage, slotIndex, flags);
