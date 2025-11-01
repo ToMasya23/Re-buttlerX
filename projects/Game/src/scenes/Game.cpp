@@ -61,6 +61,14 @@ public:
 	{
 		Game& g = m_game;
 
+		// ===== クレイジーモード発動チェック =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+		}
+
 		const auto& cards = g.m_deck.current();
 
 		auto tryAttack = [&](int slotIndex) -> bool
@@ -70,7 +78,7 @@ public:
 				return false;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 
 			if (!BattleLogic::canAttack(g.m_state))
 			{
@@ -78,13 +86,13 @@ public:
 				return true;
 			}
 
-			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			if (!BattleLogic::trySpendCost(g.m_state, visualCard.cost))
 			{
 				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, false);
 				return true;
 			}
 
-			const int32 damage = BattleUtils::slotDamage(slotIndex);
+			const int32 damage = BattleUtils::slotDamage(slotIndex, g.m_deck);
 			g.handlePlayerAttack(slotIndex, damage, net::BattleEventType::HostAttackDamage, false);
 			g.performPvEEnemyCounter();
 			return true;
@@ -137,7 +145,37 @@ public:
 		processClientMessages();
 
 		Game& g = m_game;
+
+		// ===== クレイジーモード発動チェック =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+			g.sendStateSync();
+		}
+
 		const auto& cards = g.m_deck.current();
+
+		// ===== 詠唱完了チェック（ホスト側） =====
+		if (BattleLogic::isCastingComplete(g.m_state, true))
+		{
+			int32 slot = g.m_state.playerCastingSlot;
+			const int32 damage = BattleUtils::slotDamage(slot, g.m_deck);
+			g.handlePlayerAttack(slot, damage, net::BattleEventType::HostAttackDamage, true);
+			BattleLogic::cancelCasting(g.m_state, true);
+			g.sendStateSync();
+		}
+
+		// ===== 詠唱完了チェック（クライアント側） =====
+		if (BattleLogic::isCastingComplete(g.m_state, false))
+		{
+			int32 slot = g.m_state.enemyCastingSlot;
+			const int32 damage = BattleUtils::slotDamage(slot, g.m_deck);
+			g.handleEnemyAttack(slot, damage, net::BattleEventType::ClientAttackDamage, true);
+			BattleLogic::cancelCasting(g.m_state, false);
+			g.sendStateSync();
+		}
 
 		auto tryAttack = [&](int slotIndex) -> bool
 		{
@@ -146,21 +184,31 @@ public:
 				return false;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			// 詠唱中は新しい行動不可
+			if (g.m_state.playerCasting)
+			{
+				g.handleActionRejected(2, net::BattleEventType::HostActionRejected, true);
+				return true;
+			}
+
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 			if (!BattleLogic::canAttack(g.m_state))
 			{
 				g.handleActionRejected(1, net::BattleEventType::HostActionRejected, true);
 				return true;
 			}
 
-			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			if (!BattleLogic::trySpendCost(g.m_state, visualCard.cost))
 			{
 				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, true);
 				return true;
 			}
 
-			const int32 damage = BattleUtils::slotDamage(slotIndex);
-			g.handlePlayerAttack(slotIndex, damage, net::BattleEventType::HostAttackDamage, true);
+			// 詠唱開始（即座にダメージは与えない）
+			double castTime = BattleLogic::calculateCastTime(visualCard.name);
+			BattleLogic::startCasting(g.m_state, true, slotIndex, visualCard.name, castTime);
+			g.pushLog(U"「" + visualCard.name + U"」を詠唱中...");
+			g.sendStateSync();
 			return true;
 		};
 
@@ -184,6 +232,13 @@ public:
 			{
 				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, true);
 				return;
+			}
+
+			// 詠唱キャンセル
+			if (g.m_state.playerCasting)
+			{
+				BattleLogic::cancelCasting(g.m_state, true);
+				g.pushLog(U"詠唱をキャンセルして防御！");
 			}
 
 			g.handleDefend(net::BattleEventType::HostDefend, true);
@@ -252,7 +307,16 @@ private:
 		case ActionType::Attack4:
 		{
 			const int slotIndex = Clamp(static_cast<int>(msg.slotIndex), 0, 3);
-			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? cards[slotIndex].cost : 20.0;
+
+			// クライアントが詠唱中なら拒否
+			if (g.m_state.enemyCasting)
+			{
+				g.handleActionRejected(2, net::BattleEventType::ClientActionRejected, true);
+				return;
+			}
+
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
+			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? visualCard.cost : 20.0;
 			if (g.remoteAvailableCost() < cost)
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, true);
@@ -260,8 +324,14 @@ private:
 			}
 
 			g.consumeRemoteCost(cost);
-			const int32 damage = BattleUtils::slotDamage(slotIndex);
-			g.handleEnemyAttack(damage, net::BattleEventType::ClientAttackDamage, true);
+
+			// 詠唱開始（クライアント側）
+			if (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size()))
+			{
+				double castTime = BattleLogic::calculateCastTime(visualCard.name);
+				BattleLogic::startCasting(g.m_state, false, slotIndex, visualCard.name, castTime);
+				g.sendStateSync();
+			}
 			break;
 		}
 		case ActionType::Defend:
@@ -304,6 +374,14 @@ public:
 
 		processIncomingPackets();
 
+		// ===== クレイジーモード発動チェック（クライアント側） =====
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
+		{
+			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
+			g.m_deck.enterCrazyMode();
+			g.pushLog(U"【CRAZY MODE 発動！】");
+		}
+
 		const auto& cards = g.m_deck.current();
 
 		auto trySendAttack = [&](int slotIndex) -> bool
@@ -313,20 +391,28 @@ public:
 				return false;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			// 詠唱中は新しい行動不可
+			if (g.m_state.playerCasting)
+			{
+				g.handleActionRejected(2, net::BattleEventType::ClientActionRejected, false);
+				return true;
+			}
+
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 			if (!BattleLogic::canAttack(g.m_state))
 			{
 				g.handleActionRejected(1, net::BattleEventType::ClientActionRejected, false);
 				return true;
 			}
 
-			if (g.m_state.cost() < card.cost)
+			if (g.m_state.cost() < visualCard.cost)
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, false);
 				return true;
 			}
 
 			sendRequest(actionTypeFromSlot(slotIndex), slotIndex);
+			g.pushLog(U"「" + visualCard.name + U"」を詠唱要求...");
 			return true;
 		};
 
@@ -350,6 +436,13 @@ public:
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, false);
 				return;
+			}
+
+			// 詠唱キャンセル
+			if (g.m_state.playerCasting)
+			{
+				BattleLogic::cancelCasting(g.m_state, true);
+				g.pushLog(U"詠唱をキャンセルして防御！");
 			}
 
 			sendRequest(ActionType::Defend, 0);
@@ -400,6 +493,24 @@ private:
 					break;
 				}
 				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
+				
+				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新
+				if (msg->eventType == net::BattleEventType::ClientAttackDamage || 
+				    msg->eventType == net::BattleEventType::ClientAttackBlocked)
+				{
+					int32 slotIndex = msg->secondaryValue;
+					if (slotIndex >= 0 && slotIndex < 4)
+					{
+						m_game.m_deck.onUse(slotIndex);
+						m_game.replaceUsedCardIfNeeded();
+					}
+				}
+				// クライアント側で自分の防御イベントを受信した場合、防御状態を設定
+				else if (msg->eventType == net::BattleEventType::ClientDefend)
+				{
+					m_game.m_state.defending = true;
+					m_game.m_state.defendTimer.restart();
+				}
 			}
 			else if (type == net::PacketType::BattleEnd)
 			{
@@ -503,6 +614,21 @@ void Game::update()
 	updateRemoteCost(dt);
 	updateLogs();
 
+	m_deck.updateRefills();
+
+	// ===== クレイジーモード終了チェック =====
+	const double currentTime = Scene::Time();
+	if (BattleLogic::shouldExitCrazyMode(m_state, true, currentTime))
+	{
+		BattleLogic::endCrazyMode(m_state, true);
+		m_deck.exitCrazyMode();
+		pushLog(U"【CRAZY MODE 終了】");
+	}
+	if (BattleLogic::shouldExitCrazyMode(m_state, false, currentTime))
+	{
+		BattleLogic::endCrazyMode(m_state, false);
+	}
+
 	BattleInput input = collectBattleInput();
 
 	if (m_loop)
@@ -526,15 +652,20 @@ Game::BattleInput Game::collectBattleInput()
 	const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
 	const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
 
-	if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
+	const bool canClickAttack1 = attackBtn1.mouseOver() && !m_deck.isSlotRefilling(0);
+	const bool canClickAttack2 = attackBtn2.mouseOver() && !m_deck.isSlotRefilling(1);
+	const bool canClickAttack3 = attackBtn3.mouseOver() && !m_deck.isSlotRefilling(2);
+	const bool canClickAttack4 = attackBtn4.mouseOver() && !m_deck.isSlotRefilling(3);
+	
+	if (canClickAttack1 || canClickAttack2 || canClickAttack3 || canClickAttack4 || escapeBtn.mouseOver() || defendBtn.mouseOver())
 	{
 		Cursor::RequestStyle(CursorStyle::Hand);
 	}
 
-	input.attack[0] = attackBtn1.leftClicked();
-	input.attack[1] = attackBtn2.leftClicked();
-	input.attack[2] = attackBtn3.leftClicked();
-	input.attack[3] = attackBtn4.leftClicked();
+	input.attack[0] = attackBtn1.leftClicked() && !m_deck.isSlotRefilling(0);
+	input.attack[1] = attackBtn2.leftClicked() && !m_deck.isSlotRefilling(1);
+	input.attack[2] = attackBtn3.leftClicked() && !m_deck.isSlotRefilling(2);
+	input.attack[3] = attackBtn4.leftClicked() && !m_deck.isSlotRefilling(3);
 	input.escape = escapeBtn.leftClicked();
 	input.defend = defendBtn.leftClicked();
 
@@ -620,7 +751,7 @@ void Game::performPvEEnemyCounter()
 {
 	const int32 baseDamage = s3d::Random(8, 16);
 	const int32 finalDamage = m_state.defending ? 0 : baseDamage;
-	handleEnemyAttack(finalDamage, net::BattleEventType::ClientAttackDamage, false);
+	handleEnemyAttack(-1, finalDamage, net::BattleEventType::ClientAttackDamage, false);
 }
 
 
@@ -660,15 +791,51 @@ void Game::sendStateSync()
 	msg.hostHP = m_state.playerHP;
 	msg.clientHP = m_state.enemyHP;
 	msg.hostCost = static_cast<float>(m_state.costValue);
-	msg.hostDefendTime = static_cast<float>(m_state.defendTimer.sF());
-	msg.hostDefending = m_state.defending ? 1 : 0;
 	msg.hostCrazy = m_state.playerCrazy;
 	msg.clientCrazy = m_state.enemyCrazy;
 	msg.clientCost = static_cast<float>(m_remoteCostValue);
-	msg.clientDefendTime = m_remoteDefending ? static_cast<float>(Max(0.0, m_remoteDefendEndTime - Scene::Time())) : 0.0f;
-	msg.clientDefending = m_remoteDefending ? 1 : 0;
 	msg.isHostTurn = 0;
 	msg.turnNumber = 0;
+
+	// ホスト側の状態エンコード（0=通常, 1=防御, 2=詠唱）
+	if (m_state.playerCasting)
+	{
+		msg.hostDefending = 2;
+		msg.hostDefendTime = static_cast<float>(Max(0.0, m_state.playerCastDuration - m_state.playerCastTimer.sF()));
+	}
+	else if (m_state.defending)
+	{
+		msg.hostDefending = 1;
+		msg.hostDefendTime = static_cast<float>(m_state.defendTimer.sF());
+	}
+	else
+	{
+		msg.hostDefending = 0;
+		msg.hostDefendTime = 0.0f;
+	}
+
+	// クライアント側の状態エンコード
+	if (m_state.enemyCasting)
+	{
+		msg.clientDefending = 2;
+		msg.clientDefendTime = static_cast<float>(Max(0.0, m_state.enemyCastDuration - m_state.enemyCastTimer.sF()));
+	}
+	else if (m_remoteDefending)
+	{
+		msg.clientDefending = 1;
+		msg.clientDefendTime = m_remoteDefending ? static_cast<float>(Max(0.0, m_remoteDefendEndTime - Scene::Time())) : 0.0f;
+	}
+	else
+	{
+		msg.clientDefending = 0;
+		msg.clientDefendTime = 0.0f;
+	}
+
+	// 詠唱スロット番号をreservedフィールドにエンコード
+	msg.reserved = static_cast<uint8>(
+		((m_state.playerCastingSlot + 1) << 4) | 
+		(m_state.enemyCastingSlot + 1)
+	);
 
 	m_multiplayer->send(msg);
 }
@@ -678,17 +845,84 @@ void Game::applyStateSync(const net::StateSnapshotMessage& msg)
 	m_state.playerHP = msg.clientHP;
 	m_state.enemyHP = msg.hostHP;
 	m_state.costValue = msg.clientCost;
-	m_state.playerCrazy = msg.clientCrazy;
-	m_state.enemyCrazy = msg.hostCrazy;
-	m_state.defending = (msg.clientDefending != 0);
-
-	if (m_state.defending)
+	
+	// クレイジーモード中はゲージを上書きしない
+	if (!m_state.playerCrazyMode)
 	{
+		m_state.playerCrazy = msg.clientCrazy;
+	}
+	if (!m_state.enemyCrazyMode)
+	{
+		m_state.enemyCrazy = msg.hostCrazy;
+	}
+
+	// クライアント側（自分）の状態デコード
+	if (msg.clientDefending == 2)
+	{
+		// 詠唱中
+		if (!m_state.playerCasting)
+		{
+			// 詠唱開始
+			m_state.playerCasting = true;
+			m_state.playerCastTimer.restart();
+			m_state.playerCastDuration = msg.clientDefendTime;
+			m_state.playerCastingSlot = (msg.reserved & 0x0F) - 1;
+		}
+		else
+		{
+			// 詠唱継続（残り時間更新）
+			double elapsed = m_state.playerCastTimer.sF();
+			m_state.playerCastDuration = msg.clientDefendTime + elapsed;
+		}
+		m_state.defending = false;
+	}
+	else if (msg.clientDefending == 1)
+	{
+		// 防御中
+		m_state.defending = true;
 		m_state.defendTimer.restart();
+		if (m_state.playerCasting)
+		{
+			BattleLogic::cancelCasting(m_state, true);
+		}
 	}
 	else
 	{
+		// 通常状態
+		m_state.defending = false;
 		m_state.defendTimer.reset();
+		if (m_state.playerCasting)
+		{
+			BattleLogic::cancelCasting(m_state, true);
+		}
+	}
+
+	// ホスト側（敵）の状態デコード
+	if (msg.hostDefending == 2)
+	{
+		// 詠唱中
+		if (!m_state.enemyCasting)
+		{
+			// 詠唱開始
+			m_state.enemyCasting = true;
+			m_state.enemyCastTimer.restart();
+			m_state.enemyCastDuration = msg.hostDefendTime;
+			m_state.enemyCastingSlot = ((msg.reserved >> 4) & 0x0F) - 1;
+		}
+		else
+		{
+			// 詠唱継続
+			double elapsed = m_state.enemyCastTimer.sF();
+			m_state.enemyCastDuration = msg.hostDefendTime + elapsed;
+		}
+	}
+	else
+	{
+		// 詠唱終了または防御/通常状態
+		if (m_state.enemyCasting)
+		{
+			BattleLogic::cancelCasting(m_state, false);
+		}
 	}
 
 	if (!m_isHost)
@@ -806,18 +1040,42 @@ String Game::renderBattleEvent(net::BattleEventType type, int32 primaryValue, in
 void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
-	m_state.enemyHP = Max(0, m_state.enemyHP - damage);
-	BattleLogic::addCrazy(m_state, true, +20);
-	BattleLogic::addCrazy(m_state, false, -10);
+	const int32 finalDamage = m_remoteDefending ? 0 : damage;
+	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
+
+	// 防御成功時はクレイジーゲージを変更しない
+	if (finalDamage > 0)
+	{
+		BattleLogic::addCrazy(m_state, true, +20);
+		BattleLogic::addCrazy(m_state, false, -10);
+	}
+
 	m_deck.onUse(slotIndex);
 
+	// クレイジーモード中は実際のカード名を表示
+	if (m_deck.isCrazyMode() && slotIndex >= 0)
+	{
+		const CardSpec& actualCard = m_deck.getActualCard(slotIndex);
+		pushLog(U"→ 実際は「" + actualCard.name + U"」が発動！");
+	}
+
+	// 防御成功時はAttackBlockedイベントに変更
+	net::BattleEventType actualEventType = eventType;
+	if (m_remoteDefending)
+	{
+		if (eventType == net::BattleEventType::HostAttackDamage)
+		{
+			actualEventType = net::BattleEventType::HostAttackBlocked;
+		}
+	}
+
 	const uint32 flags = net::EventFlagHitEnemy;
-	emitLocalEvent(eventType, damage, slotIndex, flags);
+	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
 	{
 		sendStateSync();
-		broadcastEventToClient(eventType, damage, slotIndex, flags);
+		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
 	replaceUsedCardIfNeeded();
@@ -841,6 +1099,14 @@ void Game::handleDefend(net::BattleEventType eventType, bool broadcastToClient)
 	{
 		m_state.defending = true;
 		m_state.defendTimer.restart();
+	}
+	else if (eventType == net::BattleEventType::ClientDefend)
+	{
+		if (!m_isHost)
+		{
+			m_state.defending = true;
+			m_state.defendTimer.restart();
+		}
 	}
 
 	const uint32 flags = 0;
@@ -876,21 +1142,38 @@ void Game::handleEscape(net::BattleEventType eventType, bool broadcastToClient)
 	finishBattleIfNeeded();
 }
 
-void Game::handleEnemyAttack(int32 damage, net::BattleEventType eventType, bool broadcastToClient)
+void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
-	m_state.playerHP = Max(0, m_state.playerHP - damage);
+	const int32 finalDamage = m_state.defending ? 0 : damage;
+	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
-	BattleLogic::addCrazy(m_state, false, +20);
+	
+	// 防御成功時はクレイジーゲージを変更しない
+	if (finalDamage > 0)
+	{
+		BattleLogic::addCrazy(m_state, false, +20);
+	}
+
+	// 防御成功時はAttackBlockedイベントに変更
+	net::BattleEventType actualEventType = eventType;
+	if (m_state.defending)
+	{
+		if (eventType == net::BattleEventType::ClientAttackDamage)
+		{
+			actualEventType = net::BattleEventType::ClientAttackBlocked;
+		}
+	}
 
 	const uint32 flags = net::EventFlagHitPlayer;
-	emitLocalEvent(eventType, damage, 0, flags);
+	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
 	{
 		sendStateSync();
-		broadcastEventToClient(eventType, damage, 0, flags);
+		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
+	replaceUsedCardIfNeeded();
 	finishBattleIfNeeded();
 }
 
@@ -1015,25 +1298,49 @@ void Game::draw() const
 
 		auto drawSlot = [&](const RoundRect& rr, int slot)
 		{
-			const auto& cards = m_deck.current();
-			const auto& last = m_deck.lastDisplayed();
-			const bool hasCurrent = (slot < static_cast<int>(cards.size()));
-			const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
-			const bool hasAny = hasCurrent || hasLast;
-			const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
-			rr.draw(base).drawFrame(2);
-			String title;
-			if (hasAny)
+			const bool isRefilling = m_deck.isSlotRefilling(slot);
+			
+			if (isRefilling)
 			{
-				const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
-				title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+				// クールタイム中：円形プログレスを表示
+				rr.draw(ColorF{ 0.95 }).drawFrame(2);
+				
+				const double progress = m_deck.getSlotRefillProgress(slot);
+				const Vec2 center = rr.center();
+				const double radius = 30.0;
+				
+				// 背景円
+				Circle{ center, radius }.drawFrame(4, ColorF{ 0.7 });
+				
+				// プログレス円（上から時計回りに描画）
+				const double angle = Math::TwoPi * progress;
+				Circle{ center, radius }.drawArc(-Math::HalfPi, angle, 4, 0, ColorF{ 0.2, 0.6, 1.0 });
+				
+				// 残り時間テキスト
+				const double remainingSec = (1.0 - progress) * CardDeck::RefillCooldownSec;
+				FontAsset(U"Bold")(U"{:.1f}"_fmt(remainingSec)).drawAt(18, center, ColorF{ 0.3 });
 			}
 			else
 			{
-				title = U"攻撃{}"_fmt(slot + 1);
+				// 通常：カードを表示
+				const bool hasCurrent = (slot < static_cast<int>(m_deck.current().size()));
+				const bool hasLast = (!hasCurrent && (slot < static_cast<int>(m_deck.lastDisplayed().size())));
+				const bool hasAny = hasCurrent || hasLast;
+				const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
+				rr.draw(base).drawFrame(2);
+				String title;
+				if (hasAny)
+				{
+					const CardSpec& c = hasCurrent ? m_deck.getVisualCard(slot) : m_deck.lastDisplayed()[slot];
+					title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+				}
+				else
+				{
+					title = U"攻撃{}"_fmt(slot + 1);
+				}
+				const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
+				FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
 			}
-			const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
-			FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
 		};
 
 		drawSlot(attackBtn1, 0);
@@ -1099,6 +1406,37 @@ void Game::draw() const
 				FontAsset(U"Bold")(entry.message).draw(fontSize, cursor, textColor);
 				cursor.y += lineHeight;
 			}
+		}
+
+		// ===== 詠唱ゲージ =====
+		// プレイヤーの詠唱ゲージ
+		if (m_state.playerCasting)
+		{
+			const double progress = BattleLogic::getCastingProgress(m_state, true);
+			const Vec2 gaugePos{ 100, 500 };
+			const double gaugeWidth = 200;
+			const double gaugeHeight = 20;
+			
+			// ゲージ背景
+			RectF{ gaugePos, gaugeWidth, gaugeHeight }.draw(ColorF{ 0.2, 0.2, 0.2 });
+			// ゲージ前景
+			RectF{ gaugePos, gaugeWidth * progress, gaugeHeight }.draw(ColorF{ 0.8, 0.6, 0.2 });
+			// テキスト
+			FontAsset(U"Bold")(U"詠唱中: " + m_state.playerCastingCardName)
+				.draw(24, Vec2{ gaugePos.x + 5, gaugePos.y - 25 }, ColorF{ 1.0 });
+			// 残り時間
+			const double remainingTime = m_state.playerCastDuration - m_state.playerCastTimer.sF();
+			FontAsset(U"Bold")(U"{:.1f}秒"_fmt(remainingTime))
+				.draw(20, Vec2{ gaugePos.x + gaugeWidth + 10, gaugePos.y + 2 }, ColorF{ 1.0 });
+		}
+		
+		// 敵の詠唱中表示（ゲージは非表示）
+		if (m_state.enemyCasting)
+		{
+			const Vec2 textPos{ 500, 100 };
+			// テキストのみ表示
+			FontAsset(U"Bold")(U"詠唱中")
+				.draw(24, textPos, ColorF{ 1.0, 0.5, 0.5 });
 		}
 
 	}

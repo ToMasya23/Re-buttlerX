@@ -101,7 +101,7 @@ private:
 	void handleActionRejected(int reasonCode, net::BattleEventType eventType, bool broadcastToClient);
 	void handleDefend(net::BattleEventType eventType, bool broadcastToClient);
 	void handleEscape(net::BattleEventType eventType, bool broadcastToClient);
-	void handleEnemyAttack(int32 damage, net::BattleEventType eventType, bool broadcastToClient);
+	void handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient);
 	void updateRemoteCost(double deltaTime);
 	double remoteAvailableCost() const;
 	void consumeRemoteCost(double amount);
