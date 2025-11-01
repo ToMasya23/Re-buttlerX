@@ -40,6 +40,14 @@ namespace BattleLogic
     inline void addCrazy(BattleState& s, bool targetIsEnemy, int32 delta)
     {
         int32& v = targetIsEnemy ? s.enemyCrazy : s.playerCrazy;
+        const bool& crazyMode = targetIsEnemy ? s.enemyCrazyMode : s.playerCrazyMode;
+        
+        // クレイジーモード中はゲージを増やさない
+        if (crazyMode)
+        {
+            return;
+        }
+        
         v = Clamp(v + delta, 0, 100);
     }
 
@@ -190,11 +198,13 @@ namespace BattleLogic
         {
             s.playerCrazyMode = false;
             s.playerCrazyModeStartTime = 0.0;
+            s.playerCrazy = 0;  // ゲージをリセット
         }
         else
         {
             s.enemyCrazyMode = false;
             s.enemyCrazyModeStartTime = 0.0;
+            s.enemyCrazy = 0;  // ゲージをリセット
         }
     }
 }

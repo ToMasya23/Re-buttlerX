@@ -652,15 +652,20 @@ Game::BattleInput Game::collectBattleInput()
 	const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
 	const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
 
-	if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
+	const bool canClickAttack1 = attackBtn1.mouseOver() && !m_deck.isSlotRefilling(0);
+	const bool canClickAttack2 = attackBtn2.mouseOver() && !m_deck.isSlotRefilling(1);
+	const bool canClickAttack3 = attackBtn3.mouseOver() && !m_deck.isSlotRefilling(2);
+	const bool canClickAttack4 = attackBtn4.mouseOver() && !m_deck.isSlotRefilling(3);
+	
+	if (canClickAttack1 || canClickAttack2 || canClickAttack3 || canClickAttack4 || escapeBtn.mouseOver() || defendBtn.mouseOver())
 	{
 		Cursor::RequestStyle(CursorStyle::Hand);
 	}
 
-	input.attack[0] = attackBtn1.leftClicked();
-	input.attack[1] = attackBtn2.leftClicked();
-	input.attack[2] = attackBtn3.leftClicked();
-	input.attack[3] = attackBtn4.leftClicked();
+	input.attack[0] = attackBtn1.leftClicked() && !m_deck.isSlotRefilling(0);
+	input.attack[1] = attackBtn2.leftClicked() && !m_deck.isSlotRefilling(1);
+	input.attack[2] = attackBtn3.leftClicked() && !m_deck.isSlotRefilling(2);
+	input.attack[3] = attackBtn4.leftClicked() && !m_deck.isSlotRefilling(3);
 	input.escape = escapeBtn.leftClicked();
 	input.defend = defendBtn.leftClicked();
 
@@ -1029,17 +1034,33 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
 	const int32 finalDamage = m_remoteDefending ? 0 : damage;
 	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
-	BattleLogic::addCrazy(m_state, true, +20);
-	BattleLogic::addCrazy(m_state, false, -10);
+	
+	// 防御成功時はクレイジーゲージを変更しない
+	if (finalDamage > 0)
+	{
+		BattleLogic::addCrazy(m_state, true, +20);
+		BattleLogic::addCrazy(m_state, false, -10);
+	}
+	
 	m_deck.onUse(slotIndex);
 
+	// 防御成功時はAttackBlockedイベントに変更
+	net::BattleEventType actualEventType = eventType;
+	if (m_remoteDefending)
+	{
+		if (eventType == net::BattleEventType::HostAttackDamage)
+		{
+			actualEventType = net::BattleEventType::HostAttackBlocked;
+		}
+	}
+
 	const uint32 flags = net::EventFlagHitEnemy;
-	emitLocalEvent(eventType, damage, slotIndex, flags);
+	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
 	{
 		sendStateSync();
-		broadcastEventToClient(eventType, damage, slotIndex, flags);
+		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
 	replaceUsedCardIfNeeded();
@@ -1111,15 +1132,30 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	const int32 finalDamage = m_state.defending ? 0 : damage;
 	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
-	BattleLogic::addCrazy(m_state, false, +20);
+	
+	// 防御成功時はクレイジーゲージを変更しない
+	if (finalDamage > 0)
+	{
+		BattleLogic::addCrazy(m_state, false, +20);
+	}
+
+	// 防御成功時はAttackBlockedイベントに変更
+	net::BattleEventType actualEventType = eventType;
+	if (m_state.defending)
+	{
+		if (eventType == net::BattleEventType::ClientAttackDamage)
+		{
+			actualEventType = net::BattleEventType::ClientAttackBlocked;
+		}
+	}
 
 	const uint32 flags = net::EventFlagHitPlayer;
-	emitLocalEvent(eventType, damage, slotIndex, flags);
+	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
 	{
 		sendStateSync();
-		broadcastEventToClient(eventType, damage, slotIndex, flags);
+		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
 	replaceUsedCardIfNeeded();
@@ -1247,25 +1283,51 @@ void Game::draw() const
 
 		auto drawSlot = [&](const RoundRect& rr, int slot)
 		{
-			const auto& cards = m_deck.current();
-			const auto& last = m_deck.lastDisplayed();
-			const bool hasCurrent = (slot < static_cast<int>(cards.size()));
-			const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
-			const bool hasAny = hasCurrent || hasLast;
-			const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
-			rr.draw(base).drawFrame(2);
-			String title;
-			if (hasAny)
+			const bool isRefilling = m_deck.isSlotRefilling(slot);
+			
+			if (isRefilling)
 			{
-				const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
-				title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+				// クールタイム中：円形プログレスを表示
+				rr.draw(ColorF{ 0.95 }).drawFrame(2);
+				
+				const double progress = m_deck.getSlotRefillProgress(slot);
+				const Vec2 center = rr.center();
+				const double radius = 30.0;
+				
+				// 背景円
+				Circle{ center, radius }.drawFrame(4, ColorF{ 0.7 });
+				
+				// プログレス円（上から時計回りに描画）
+				const double angle = Math::TwoPi * progress;
+				Circle{ center, radius }.drawArc(-Math::HalfPi, angle, 4, 0, ColorF{ 0.2, 0.6, 1.0 });
+				
+				// 残り時間テキスト
+				const double remainingSec = (1.0 - progress) * CardDeck::RefillCooldownSec;
+				FontAsset(U"Bold")(U"{:.1f}"_fmt(remainingSec)).drawAt(18, center, ColorF{ 0.3 });
 			}
 			else
 			{
-				title = U"攻撃{}"_fmt(slot + 1);
+				// 通常：カードを表示
+				const auto& cards = m_deck.current();
+				const auto& last = m_deck.lastDisplayed();
+				const bool hasCurrent = (slot < static_cast<int>(cards.size()));
+				const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
+				const bool hasAny = hasCurrent || hasLast;
+				const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
+				rr.draw(base).drawFrame(2);
+				String title;
+				if (hasAny)
+				{
+					const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
+					title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+				}
+				else
+				{
+					title = U"攻撃{}"_fmt(slot + 1);
+				}
+				const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
+				FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
 			}
-			const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
-			FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
 		};
 
 		drawSlot(attackBtn1, 0);
