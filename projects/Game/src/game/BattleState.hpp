@@ -31,6 +31,18 @@ struct BattleState
     HitTarget hitTarget = HitTarget::None;
     Stopwatch hitTimer{ StartImmediately::No };
     static constexpr double HitDuration = 0.25;
+
+    // ===== 詠唱システム =====
+    bool playerCasting = false;
+    bool enemyCasting = false;
+    Stopwatch playerCastTimer{ StartImmediately::No };
+    Stopwatch enemyCastTimer{ StartImmediately::No };
+    double playerCastDuration = 0.0;
+    double enemyCastDuration = 0.0;
+    int32 playerCastingSlot = -1;
+    int32 enemyCastingSlot = -1;
+    String playerCastingCardName;
+    String enemyCastingCardName;
 };
 
 
