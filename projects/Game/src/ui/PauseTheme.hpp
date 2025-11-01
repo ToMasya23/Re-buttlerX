@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 
 namespace PauseTheme
@@ -16,10 +16,10 @@ namespace PauseTheme
 	inline constexpr ColorF TitleColor{ 0.15 };
 
 	// ボタン
-	inline constexpr Size ButtonSize{ 320, 52 };
+	inline constexpr Size ButtonSize{ 240, 52 };
 	inline constexpr int32 ButtonR = 8;
 	inline constexpr int32 ButtonXs = 400; // center.x
-	inline constexpr int32 ButtonYs[6] = { 190, 260, 330, 400, 470, 540 };
+	inline constexpr int32 ButtonYs[6] = { 125, 195, 265, 335, 405, 475 };
 
 	// 暗転
 	inline constexpr ColorF Dimmer{ 0.0, 0.35 };

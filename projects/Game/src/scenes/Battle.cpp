@@ -1,4 +1,4 @@
-# include "Battle.hpp"
+﻿# include "Battle.hpp"
 
 Battle::Battle(const InitData& init)
 	: IScene{ init }

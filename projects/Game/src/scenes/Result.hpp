@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
 
@@ -14,12 +14,19 @@ public:
 	void draw() const override;
 
 private:
+	Texture m_titleFrame{ U"assets/ui/frames/result_title_frame.png" };
+	Texture m_bigFrame{ U"assets/ui/frames/result_big_frame.png" };
 
-	RoundRect m_rematchButton{ Arg::center(400, 360), 300, 60, 8 };
-	RoundRect m_lobbyButton{ Arg::center(400, 440), 300, 60, 8 };
+	Texture m_player_win{ U"assets/ui/characters/player_win.png" };
+	Texture m_player_loose{ U"assets/ui/characters/player_loose.png" };
+
+	RoundRect m_rematchRect{ Arg::center(200, 240), 300, 100, 4 }; // コンストラクタで初期化
+	RoundRect m_lobbyButton{ Arg::center(200, 360), 300, 100, 4 };
+	RoundRect m_pauseButton{ Arg::center(200, 480), 300, 100, 4 };
 
 	Transition m_rematchTr{ 0.4s, 0.2s };
 	Transition m_lobbyTr{ 0.4s, 0.2s };
+	Transition m_pauseTr{ 0.4s, 0.2s };
 
 	// ---- ポーズ用 ----
 	bool m_paused = false;
@@ -27,19 +34,18 @@ private:
 	RenderTexture m_blurInternal;
 	RenderTexture m_blurTarget;
 
-	RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[0]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_settingsButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_howToButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_effectButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[4]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_exitPauseButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+	RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+	RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+	RoundRect m_exitPauseButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
 
 	Transition m_resumeTr{ 0.3s, 0.15s };
-	Transition m_settingsTr{ 0.3s, 0.15s };
-	Transition m_howToTr{ 0.3s, 0.15s };
-	Transition m_effectTr{ 0.3s, 0.15s };
 	Transition m_titleTr{ 0.3s, 0.15s };
 	Transition m_exitPauseTr{ 0.3s, 0.15s };
+
+	void updateRenderTargets() const;
+	void drawMainContent() const;
+	void updatePauseMenu();
+	void drawPauseMenu() const;
 };
 
 

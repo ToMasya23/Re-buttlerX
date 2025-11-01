@@ -265,22 +265,20 @@ void Lobby::draw() const
         const Font& title = FontAsset(U"TitleFont");
         const Font& bold = FontAsset(U"Bold");
         const RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
-        panel.draw(PauseTheme::PanelFill).drawFrame(3, 0, PauseTheme::PanelFrame);
-        title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
 
-        m_resumeButton.draw(ColorF{ 1.0, m_resumeTr.value() }).drawFrame(2);
-        m_settingsButton.draw(ColorF{ 1.0, m_settingsTr.value() }).drawFrame(2);
-        m_howToButton.draw(ColorF{ 1.0, m_howToTr.value() }).drawFrame(2);
-        m_effectButton.draw(ColorF{ 1.0, m_effectTr.value() }).drawFrame(2);
-        m_titleButton.draw(ColorF{ 1.0, m_titleTr.value() }).drawFrame(2);
-        m_exitPauseButton.draw(ColorF{ 1.0, m_exitPauseTr.value() }).drawFrame(2);
+        m_resumeButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_resumeTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
+        m_settingsButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_settingsTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
+        m_howToButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_howToTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
+        m_effectButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_effectTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
+        m_titleButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_titleTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
+        m_exitPauseButton.draw(ColorF{ 0.925f, 0.714f, 0.882f, m_exitPauseTr.value() }).drawFrame(4, ColorF{ 0.925f, 0.714f, 0.882f });
 
-        bold(U"再開").drawAt(28, m_resumeButton.center(), ColorF{ 0.1 });
-        bold(U"設定").drawAt(28, m_settingsButton.center(), ColorF{ 0.1 });
-        bold(U"ゲーム説明").drawAt(28, m_howToButton.center(), ColorF{ 0.1 });
-        bold(U"効果確認").drawAt(28, m_effectButton.center(), ColorF{ 0.1 });
-        bold(U"タイトルへ").drawAt(28, m_titleButton.center(), ColorF{ 0.1 });
-        bold(U"EXIT").drawAt(28, m_exitPauseButton.center(), ColorF{ 0.1 });
+        bold(U"再開").drawAt(28, m_resumeButton.center(), ColorF{ 1 });
+        bold(U"設定").drawAt(28, m_settingsButton.center(), ColorF{ 1 });
+        bold(U"ゲーム説明").drawAt(28, m_howToButton.center(), ColorF{ 1 });
+        bold(U"効果確認").drawAt(28, m_effectButton.center(), ColorF{ 1 });
+        bold(U"タイトルへ").drawAt(28, m_titleButton.center(), ColorF{ 1 });
+        bold(U"EXIT").drawAt(28, m_exitPauseButton.center(), ColorF{ 1 });
     }
     else
     {
