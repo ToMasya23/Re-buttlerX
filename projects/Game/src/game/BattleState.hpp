@@ -23,11 +23,8 @@ struct BattleState
     int32 playerCrazy = 0;
     int32 enemyCrazy = 0;
 
-    // メッセージ・進行
-    bool waitingForAcknowledge = false;
+    // メッセージ
     String battleMessage;
-    enum class NextAction { None, EnemyCounter, BackToSelection, FinishBattle };
-    NextAction nextAction = NextAction::None;
 
     // 被弾エフェクト
     enum class HitTarget { None, Player, Enemy };

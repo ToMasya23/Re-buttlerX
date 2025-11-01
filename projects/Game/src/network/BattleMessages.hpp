@@ -1,71 +1,130 @@
-# pragma once
+#pragma once
 #include <Siv3D.hpp>
+#include <cstdint>
+#include <cstddef>
 #include "../game/BattleTypes.hpp"
 
-// メッセージタイプ
-enum class MessageType : uint8
+namespace net
 {
-	PlayerAction    = 0x01,  // プレイヤーアクション
-	GameStateSync   = 0x11,  // 状態同期
-	TurnChange      = 0x12,  // ターン変更
-	BattleMessage   = 0x13,  // テキストメッセージ
-	BattleEnd       = 0x14,  // 戦闘終了
-};
+	constexpr uint32 PacketMagic = 0x52425858; // "RBXX"
+	constexpr uint16 ProtocolVersion = 0x0002;
+	constexpr uint32 MaxPayloadSize = 2048;
 
-// プレイヤーアクションメッセージ
-struct PlayerActionMessage
-{
-	MessageType type = MessageType::PlayerAction;
-	ActionType action = ActionType::Attack1;
-	int32 damage = 0;  // ダメージ量
-	uint32 turnNumber = 0;
-};
+	enum class PacketType : uint16
+	{
+		Handshake      = 0x0001,
+		Heartbeat      = 0x0002,
+		ActionRequest  = 0x0100,
+		StateSnapshot  = 0x0101,
+		BattleEvent    = 0x0102,
+		BattleEnd      = 0x0103,
+	};
 
-// ゲーム状態同期メッセージ
-struct GameStateSyncMessage
-{
-	MessageType type = MessageType::GameStateSync;
+	enum class ConnectionRole : uint8
+	{
+		Host = 0,
+		Client = 1,
+	};
 
-	// ホスト側の状態
-	int32 hostHP = 0;
-	double hostCost = 0.0;
-	bool hostDefending = false;
-	double hostDefendTime = 0.0;
-	int32 hostCrazy = 0;
+	enum class BattleEventType : uint16
+	{
+		None = 0,
+		HostAttackDamage = 1,
+		HostAttackBlocked = 2,
+		HostActionRejected = 3,
+		HostDefend = 4,
+		HostEscape = 5,
+		ClientAttackDamage = 6,
+		ClientAttackBlocked = 7,
+		ClientActionRejected = 8,
+		ClientDefend = 9,
+		TurnChanged = 10,
+		ClientEscape = 11,
+		Custom = 0xFFFF,
+	};
 
-	// クライアント側の状態
-	int32 clientHP = 0;
-	double clientCost = 0.0;
-	bool clientDefending = false;
-	double clientDefendTime = 0.0;
-	int32 clientCrazy = 0;
+	enum class BattleEndReason : uint8
+	{
+		HPZero = 0,
+		Escape = 1,
+		Disconnect = 2,
+		Timeout = 3,
+	};
 
-	// バトル状態
-	bool isHostTurn = false;
-	uint32 turnNumber = 0;
-};
+	constexpr uint32 EventFlagRequiresAcknowledge = 1u << 0;
+	constexpr uint32 EventFlagHitPlayer = 1u << 1;
+	constexpr uint32 EventFlagHitEnemy = 1u << 2;
 
-// ターン変更メッセージ
-struct TurnChangeMessage
-{
-	MessageType type = MessageType::TurnChange;
-	bool isHostTurn = false;
-	uint32 turnNumber = 0;
-};
+	struct PacketHeader
+	{
+		uint32 magic = PacketMagic;
+		uint16 version = ProtocolVersion;
+		uint16 type = 0;
+		uint32 payloadSize = 0;
+		uint32 sequence = 0;
+		uint32 checksum = 0;
+	};
 
-// バトルテキストメッセージ
-struct BattleTextMessage
-{
-	MessageType type = MessageType::BattleMessage;
-	String message;
-};
+	struct HandshakeMessage
+	{
+		uint32 version = ProtocolVersion;
+		uint32 nonce = 0;
+		ConnectionRole role = ConnectionRole::Host;
+		uint8 reserved[3]{};
+	};
 
-// 戦闘終了メッセージ
-struct BattleEndMessage
-{
-	MessageType type = MessageType::BattleEnd;
-	bool hostWon = false;
-	int32 hostFinalHP = 0;
-	int32 clientFinalHP = 0;
-	uint8 endReason = 0;  // 0=HP0, 1=逃走, 2=切断
-};
+	struct ActionRequestMessage
+	{
+		uint32 turnNumber = 0;
+		uint32 requestId = 0;
+		ActionType action = ActionType::Attack1;
+		uint8 slotIndex = 0;
+		uint8 reserved[3]{};
+	};
+
+	struct StateSnapshotMessage
+	{
+		int32 hostHP = 0;
+		int32 clientHP = 0;
+		float hostCost = 0.0f;
+		float clientCost = 0.0f;
+		float hostDefendTime = 0.0f;
+		float clientDefendTime = 0.0f;
+		int32 hostCrazy = 0;
+		int32 clientCrazy = 0;
+		uint8 hostDefending = 0;
+		uint8 clientDefending = 0;
+		uint8 isHostTurn = 0;
+		uint8 reserved = 0;
+		uint32 turnNumber = 0;
+	};
+
+	struct BattleEventMessage
+	{
+		BattleEventType eventType = BattleEventType::None;
+		int32 primaryValue = 0;
+		int32 secondaryValue = 0;
+		uint32 flags = 0;
+	};
+
+	struct BattleEndMessage
+	{
+		int32 hostFinalHP = 0;
+		int32 clientFinalHP = 0;
+		uint8 hostWon = 0;
+		BattleEndReason reason = BattleEndReason::HPZero;
+		uint8 reserved[2]{};
+	};
+
+	inline uint32 ComputeChecksum(const void* data, size_t size)
+	{
+		const uint8* bytes = static_cast<const uint8*>(data);
+		uint32 hash = 2166136261u; // FNV-1a
+		for (size_t i = 0; i < size; ++i)
+		{
+			hash ^= bytes[i];
+			hash *= 16777619u;
+		}
+		return hash;
+	}
+}

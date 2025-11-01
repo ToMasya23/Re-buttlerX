@@ -1,5 +1,23 @@
-#include "UDPDiscovery.hpp"
+﻿#include "UDPDiscovery.hpp"
 #include <cstring>
+
+namespace
+{
+inline void CopyStringSafe(char* dest, size_t destSize, const std::string& source)
+{
+	if (!dest || destSize == 0)
+	{
+		return;
+	}
+
+#ifdef _WIN32
+	strncpy_s(dest, destSize, source.c_str(), _TRUNCATE);
+#else
+	std::strncpy(dest, source.c_str(), destSize - 1);
+	dest[destSize - 1] = '\0';
+#endif
+}
+}
 
 UDPDiscovery::UDPDiscovery()
 {
@@ -234,12 +252,12 @@ void UDPDiscovery::sendResponse(const IPv4Address& targetAddress, uint16 targetP
 
 	// ゲーム名をUTF-8でコピー
 	std::string gameNameUTF8 = m_gameName.toUTF8();
-	strncpy_s(response.gameName, sizeof(response.gameName), gameNameUTF8.c_str(), _TRUNCATE);
+	CopyStringSafe(response.gameName, sizeof(response.gameName), gameNameUTF8);
 
 	// ホスト名を取得
 	String hostName = System::ComputerName();
 	std::string hostNameUTF8 = hostName.toUTF8();
-	strncpy_s(response.hostName, sizeof(response.hostName), hostNameUTF8.c_str(), _TRUNCATE);
+	CopyStringSafe(response.hostName, sizeof(response.hostName), hostNameUTF8);
 
 	response.timestamp = static_cast<uint32>(Time::GetSecSinceEpoch());
 
@@ -264,7 +282,7 @@ void UDPDiscovery::sendDiscoveryRequest()
 
 	// 合言葉をUTF-8でコピー
 	std::string passphraseUTF8 = m_passphrase.toUTF8();
-	strncpy_s(request.passphrase, sizeof(request.passphrase), passphraseUTF8.c_str(), _TRUNCATE);
+	CopyStringSafe(request.passphrase, sizeof(request.passphrase), passphraseUTF8);
 
 	// ブロードキャストアドレスに送信
 	IPv4Address broadcastAddr{ 255, 255, 255, 255 };
@@ -313,3 +331,4 @@ void UDPDiscovery::addDiscoveredHost(const Array<uint8>& data, const IPv4Address
 		Console << U"[UDPDiscovery] New host discovered: " << info.hostName << U" (" << address.str() << U":" << info.port << U")";
 	}
 }
+

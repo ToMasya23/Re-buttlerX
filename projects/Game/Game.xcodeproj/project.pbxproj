@@ -51,6 +51,10 @@
         3C2100000000000000000003 /* Title.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000013 /* Title.cpp (scenes) */; };
         3C2100000000000000000005 /* Menu.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000015 /* Menu.cpp (scenes) */; };
         3C2100000000000000000007 /* Battle.cpp (scenes) in Sources */ = {isa = PBXBuildFile; fileRef = 3C2100000000000000000017 /* Battle.cpp (scenes) */; };
+        3C2200000000000000000090 /* HostDiscovery.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C2200000000000000000010 /* HostDiscovery.cpp */; };
+        3C2200000000000000000091 /* UDPDiscovery.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C2200000000000000000012 /* UDPDiscovery.cpp */; };
+        3C2200000000000000000092 /* MultiplayerManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C2200000000000000000014 /* MultiplayerManager.cpp */; };
+        3C2200000000000000000093 /* NetworkPlatform_Mac.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C2200000000000000000017 /* NetworkPlatform_Mac.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -174,6 +178,7 @@
 				2C1778991CE0AA7C00BB8AD0 /* Main.cpp */,
 				3C1000000000000000000001 /* scenes */,
 				3C1000000000000000000002 /* pause */,
+                3C2200000000000000000001 /* network */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -215,6 +220,23 @@
 			path = src/pause;
 			sourceTree = SOURCE_ROOT;
 		};
+        3C2200000000000000000001 /* network */ = {
+            isa = PBXGroup;
+            children = (
+                3C2200000000000000000014 /* MultiplayerManager.cpp */,
+                3C2200000000000000000015 /* MultiplayerManager.hpp */,
+                3C2200000000000000000010 /* HostDiscovery.cpp */,
+                3C2200000000000000000011 /* HostDiscovery.hpp */,
+                3C2200000000000000000012 /* UDPDiscovery.cpp */,
+                3C2200000000000000000013 /* UDPDiscovery.hpp */,
+                3C2200000000000000000017 /* NetworkPlatform_Mac.cpp */,
+                3C2200000000000000000016 /* NetworkPlatform.hpp */,
+                3C2200000000000000000018 /* BattleMessages.hpp */,
+            );
+            name = network;
+            path = src/network;
+            sourceTree = SOURCE_ROOT;
+        };
         3C2100000000000000000011 /* Game.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Game.cpp; path = src/scenes/Game.cpp; sourceTree = SOURCE_ROOT; };
         3C2100000000000000000012 /* Game.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Game.hpp; path = src/scenes/Game.hpp; sourceTree = SOURCE_ROOT; };
         3C2100000000000000000013 /* Title.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Title.cpp; path = src/scenes/Title.cpp; sourceTree = SOURCE_ROOT; };
@@ -223,6 +245,15 @@
         3C2100000000000000000016 /* Menu.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Menu.hpp; path = src/scenes/Menu.hpp; sourceTree = SOURCE_ROOT; };
         3C2100000000000000000017 /* Battle.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Battle.cpp; path = src/scenes/Battle.cpp; sourceTree = SOURCE_ROOT; };
         3C2100000000000000000018 /* Battle.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = Battle.hpp; path = src/scenes/Battle.hpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000010 /* HostDiscovery.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = HostDiscovery.cpp; path = src/network/HostDiscovery.cpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000011 /* HostDiscovery.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = HostDiscovery.hpp; path = src/network/HostDiscovery.hpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000012 /* UDPDiscovery.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = UDPDiscovery.cpp; path = src/network/UDPDiscovery.cpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000013 /* UDPDiscovery.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = UDPDiscovery.hpp; path = src/network/UDPDiscovery.hpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000014 /* MultiplayerManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = MultiplayerManager.cpp; path = src/network/MultiplayerManager.cpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000015 /* MultiplayerManager.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = MultiplayerManager.hpp; path = src/network/MultiplayerManager.hpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000016 /* NetworkPlatform.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = NetworkPlatform.hpp; path = src/network/NetworkPlatform.hpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000017 /* NetworkPlatform_Mac.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkPlatform_Mac.cpp; path = src/network/NetworkPlatform_Mac.cpp; sourceTree = SOURCE_ROOT; };
+        3C2200000000000000000018 /* BattleMessages.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = BattleMessages.hpp; path = src/network/BattleMessages.hpp; sourceTree = SOURCE_ROOT; };
 		2CC7F9861F45930A0071A239 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -338,6 +369,10 @@
 				3C0000050000000000000001 /* Settings.cpp in Sources */,
 				3C0000060000000000000001 /* HowToPlay.cpp in Sources */,
 				3C0000070000000000000001 /* EffectViewer.cpp in Sources */,
+                3C2200000000000000000090 /* HostDiscovery.cpp in Sources */,
+                3C2200000000000000000091 /* UDPDiscovery.cpp in Sources */,
+                3C2200000000000000000092 /* MultiplayerManager.cpp in Sources */,
+                3C2200000000000000000093 /* NetworkPlatform_Mac.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

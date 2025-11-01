@@ -1,13 +1,15 @@
-# include "Game.hpp"
-# include "../game/BattleLogic.hpp"
-# include "../game/BattleUtils.hpp"
-# include "../tools/NineSlice.hpp"
+#include "Game.hpp"
+#include "../game/BattleLogic.hpp"
+#include "../game/BattleUtils.hpp"
+#include "../tools/NineSlice.hpp"
+
 namespace
 {
 	static constexpr int32 Damage1 = 10;
 	static constexpr int32 Damage2 = 20;
 
-	NineSliceSkin& ScreenFrame() {
+	NineSliceSkin& ScreenFrame()
+	{
 		static NineSliceSkin skin{
 			U"assets/ui/frames/battle_frame.png",
 			20, 20, 20, 20,
@@ -16,7 +18,8 @@ namespace
 		return skin;
 	}
 
-	NineSliceSkin& BaseFrame() {
+	NineSliceSkin& BaseFrame()
+	{
 		static NineSliceSkin skin{
 			U"assets/ui/frames/battle_base.png",
 			20, 20, 20, 20,
@@ -31,800 +34,1087 @@ namespace
 		const double sx = dst.w / tex.width();
 		const double sy = dst.h / tex.height();
 		const double s = s3d::Min(sx, sy);
-		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } *s;
+		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } * s;
 		const s3d::Vec2 pos = dst.center() - size * 0.5;
 		tex.scaled(s).draw(pos, tint);
 	}
+
+	inline ActionType actionTypeFromSlot(int slot)
+	{
+		switch (slot)
+		{
+		case 0: return ActionType::Attack1;
+		case 1: return ActionType::Attack2;
+		case 2: return ActionType::Attack3;
+		case 3: return ActionType::Attack4;
+		default: return ActionType::Attack1;
+		}
+	}
 }
 
-Game::Game(const InitData& init)
-    : IScene{ init }
+class Game::PvELoop : public Game::BattleLoop
 {
-	// 全モード共通の初期化
-    m_faces.load();
-    m_deck.loadAll();
-    if (m_deck.hasCards())
-    {
-        m_deck.refillRandom(4);
-    }
+public:
+	using Game::BattleLoop::BattleLoop;
 
-	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
+	void update(const BattleInput& input) override
+	{
+		Game& g = m_game;
+
+		const auto& cards = g.m_deck.current();
+
+		auto tryAttack = [&](int slotIndex) -> bool
+		{
+			if (slotIndex < 0 || slotIndex >= static_cast<int>(cards.size()))
+			{
+				return false;
+			}
+
+			const CardSpec& card = cards[slotIndex];
+
+			if (!BattleLogic::canAttack(g.m_state))
+			{
+				g.handleActionRejected(1, net::BattleEventType::HostActionRejected, false);
+				return true;
+			}
+
+			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			{
+				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, false);
+				return true;
+			}
+
+			const int32 damage = BattleUtils::slotDamage(slotIndex);
+			g.handlePlayerAttack(slotIndex, damage, net::BattleEventType::HostAttackDamage, false);
+			g.performPvEEnemyCounter();
+			return true;
+		};
+
+		for (int i = 0; i < 4; ++i)
+		{
+			if (input.attack[i] && tryAttack(i))
+			{
+				return;
+			}
+		}
+
+		if (input.escape)
+		{
+			g.handleEscape(net::BattleEventType::HostEscape, false);
+			return;
+		}
+
+		if (input.defend)
+		{
+			if (!BattleLogic::canDefend(g.m_state) || !BattleLogic::trySpendCost(g.m_state, 20))
+			{
+				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, false);
+				return;
+			}
+
+			g.handleDefend(net::BattleEventType::HostDefend, false);
+		}
+	}
+
+};
+
+class Game::PvPHostLoop : public Game::BattleLoop
+{
+public:
+	using Game::BattleLoop::BattleLoop;
+
+	void onEnter() override
+	{
+		if (m_game.m_multiplayer && m_game.m_multiplayer->isConnected())
+		{
+			m_game.sendStateSync();
+			m_lastSyncSent = Scene::Time();
+		}
+	}
+
+	void update(const BattleInput& input) override
+	{
+		processClientMessages();
+
+		Game& g = m_game;
+		const auto& cards = g.m_deck.current();
+
+		auto tryAttack = [&](int slotIndex) -> bool
+		{
+			if (slotIndex < 0 || slotIndex >= static_cast<int>(cards.size()))
+			{
+				return false;
+			}
+
+			const CardSpec& card = cards[slotIndex];
+			if (!BattleLogic::canAttack(g.m_state))
+			{
+				g.handleActionRejected(1, net::BattleEventType::HostActionRejected, true);
+				return true;
+			}
+
+			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			{
+				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, true);
+				return true;
+			}
+
+			const int32 damage = BattleUtils::slotDamage(slotIndex);
+			g.handlePlayerAttack(slotIndex, damage, net::BattleEventType::HostAttackDamage, true);
+			return true;
+		};
+
+		for (int i = 0; i < 4; ++i)
+		{
+			if (input.attack[i] && tryAttack(i))
+			{
+				return;
+			}
+		}
+
+		if (input.escape)
+		{
+			g.handleEscape(net::BattleEventType::HostEscape, true);
+			return;
+		}
+
+		if (input.defend)
+		{
+			if (!BattleLogic::canDefend(g.m_state) || !BattleLogic::trySpendCost(g.m_state, 20))
+			{
+				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, true);
+				return;
+			}
+
+			g.handleDefend(net::BattleEventType::HostDefend, true);
+			return;
+		}
+
+		const double now = Scene::Time();
+		if (g.m_multiplayer && g.m_multiplayer->isConnected() && (now - m_lastSyncSent) > 0.2)
+		{
+			g.sendStateSync();
+			m_lastSyncSent = now;
+		}
+	}
+
+private:
+	void processClientMessages()
+	{
+		if (!m_game.m_multiplayer || m_game.m_multiplayer->getConnectionState() != MultiplayerManager::ConnectionState::Connected)
+		{
+			return;
+		}
+
+		auto& net = *m_game.m_multiplayer;
+
+		while (true)
+		{
+			net::PacketType type = net.peekPacketType();
+			if (type == net::PacketType::ActionRequest)
+			{
+				auto msg = net.receive<net::ActionRequestMessage>();
+				if (!msg)
+				{
+					break;
+				}
+				handleClientRequest(*msg);
+			}
+			else if (type == net::PacketType::BattleEvent || type == net::PacketType::StateSnapshot || type == net::PacketType::BattleEnd)
+			{
+				net.discardFrontPacket();
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+
+	void handleClientRequest(const net::ActionRequestMessage& msg)
+	{
+		Game& g = m_game;
+
+		if (msg.requestId <= m_lastClientRequestId)
+		{
+			return;
+		}
+
+		m_lastClientRequestId = msg.requestId;
+
+		const auto& cards = g.m_deck.current();
+
+		switch (msg.action)
+		{
+		case ActionType::Attack1:
+		case ActionType::Attack2:
+		case ActionType::Attack3:
+		case ActionType::Attack4:
+		{
+			const int slotIndex = Clamp(static_cast<int>(msg.slotIndex), 0, 3);
+			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? cards[slotIndex].cost : 20.0;
+			if (g.remoteAvailableCost() < cost)
+			{
+				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, true);
+				return;
+			}
+
+			g.consumeRemoteCost(cost);
+			const int32 damage = BattleUtils::slotDamage(slotIndex);
+			g.handleEnemyAttack(damage, net::BattleEventType::ClientAttackDamage, true);
+			break;
+		}
+		case ActionType::Defend:
+		{
+			const double defendCost = 20.0;
+			if (g.remoteAvailableCost() < defendCost)
+			{
+				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, true);
+				return;
+			}
+
+			g.consumeRemoteCost(defendCost);
+			g.startRemoteDefend();
+			g.handleDefend(net::BattleEventType::ClientDefend, true);
+			break;
+		}
+		case ActionType::Skill:
+		{
+			g.handleEscape(net::BattleEventType::ClientEscape, true);
+			break;
+		}
+		default:
+			g.handleActionRejected(3, net::BattleEventType::ClientActionRejected, true);
+			break;
+		}
+	}
+
+	uint32 m_lastClientRequestId = 0;
+	double m_lastSyncSent = 0.0;
+};
+
+class Game::PvPClientLoop : public Game::BattleLoop
+{
+public:
+	using Game::BattleLoop::BattleLoop;
+
+	void update(const BattleInput& input) override
+	{
+		Game& g = m_game;
+
+		processIncomingPackets();
+
+		const auto& cards = g.m_deck.current();
+
+		auto trySendAttack = [&](int slotIndex) -> bool
+		{
+			if (slotIndex < 0 || slotIndex >= static_cast<int>(cards.size()))
+			{
+				return false;
+			}
+
+			const CardSpec& card = cards[slotIndex];
+			if (!BattleLogic::canAttack(g.m_state))
+			{
+				g.handleActionRejected(1, net::BattleEventType::ClientActionRejected, false);
+				return true;
+			}
+
+			if (g.m_state.cost() < card.cost)
+			{
+				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, false);
+				return true;
+			}
+
+			sendRequest(actionTypeFromSlot(slotIndex), slotIndex);
+			return true;
+		};
+
+		for (int i = 0; i < 4; ++i)
+		{
+			if (input.attack[i] && trySendAttack(i))
+			{
+				return;
+			}
+		}
+
+		if (input.escape)
+		{
+			sendRequest(ActionType::Skill, 0);
+			return;
+		}
+
+		if (input.defend)
+		{
+			if (!BattleLogic::canDefend(g.m_state) || g.m_state.cost() < 20)
+			{
+				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, false);
+				return;
+			}
+
+			sendRequest(ActionType::Defend, 0);
+		}
+	}
+
+private:
+	void sendRequest(ActionType action, int slotIndex)
+	{
+		if (!m_game.m_multiplayer || m_game.m_multiplayer->getConnectionState() != MultiplayerManager::ConnectionState::Connected)
+		{
+			return;
+		}
+
+		net::ActionRequestMessage msg{};
+		msg.requestId = m_nextRequestId++;
+		msg.action = action;
+		msg.slotIndex = static_cast<uint8>(slotIndex);
+		m_game.m_multiplayer->send(msg);
+	}
+
+	void processIncomingPackets()
+	{
+		if (!m_game.m_multiplayer || m_game.m_multiplayer->getConnectionState() != MultiplayerManager::ConnectionState::Connected)
+		{
+			return;
+		}
+
+		auto& net = *m_game.m_multiplayer;
+
+		while (true)
+		{
+			net::PacketType type = net.peekPacketType();
+			if (type == net::PacketType::StateSnapshot)
+			{
+				auto msg = net.receive<net::StateSnapshotMessage>();
+				if (!msg)
+				{
+					break;
+				}
+				m_game.applyStateSync(*msg);
+			}
+			else if (type == net::PacketType::BattleEvent)
+			{
+				auto msg = net.receive<net::BattleEventMessage>();
+				if (!msg)
+				{
+					break;
+				}
+				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
+			}
+			else if (type == net::PacketType::BattleEnd)
+			{
+				auto msg = net.receive<net::BattleEndMessage>();
+				if (msg)
+				{
+					const bool hostWon = (msg->hostWon != 0);
+					m_game.concludeBattle(msg->reason, hostWon);
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+
+	uint32 m_nextRequestId = 1;
+};
+Game::Game(const InitData& init)
+	: IScene{ init }
+{
+	m_faces.load();
+	m_deck.loadAll();
+	if (m_deck.hasCards())
+	{
+		m_deck.refillRandom(4);
+	}
+
 	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
-	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
-	
-	// ===== オンライン対戦の初期化 =====
+	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy.png", s3d::TextureDesc::Unmipped };
+
 	if (getData().multiplayer)
 	{
-		Console << U"[Game] オンライン対戦モードで初期化開始 isHost=" << getData().isHost;
-		
 		m_multiplayer = getData().multiplayer;
 		m_isOnlineMode = true;
 		m_isHost = getData().isHost;
-		m_isMyTurn = m_isHost;  // ホストが先攻
-		
-		// 初期状態を相手に送信
-		Console << U"[Game] 初期状態を送信します playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
-		sendGameStateSync();
+	}
+
+	m_remoteCostValue = 100.0;
+	m_remoteDefending = false;
+	m_remoteDefendEndTime = 0.0;
+
+	setupBattleLoop();
+	if (m_loop)
+	{
+		m_loop->onEnter();
+	}
+}
+
+void Game::setupBattleLoop()
+{
+	if (m_isOnlineMode)
+	{
+		if (m_isHost)
+		{
+			m_loop = std::make_unique<PvPHostLoop>(*this);
+		}
+		else
+		{
+			m_loop = std::make_unique<PvPClientLoop>(*this);
+		}
+	}
+	else
+	{
+		m_loop = std::make_unique<PvELoop>(*this);
 	}
 }
 
 void Game::update()
 {
-	// Esc でポーズをトグル
 	if (KeyEscape.down())
 	{
 		m_paused = (not m_paused);
+	}
+
+	if (m_paused)
+	{
+		updatePausedUI();
 		return;
 	}
 
-    // 使用後のクールダウン掃除
-    m_deck.cleanupCooldowns();
-
-    if (m_paused)
-    {
-        const PauseMenu::Action action = m_pauseMenu.update();
-        switch (action)
-        {
-        case PauseMenu::Action::Resume:
-            m_paused = false;
-            break;
-        case PauseMenu::Action::Settings:
-            changeScene(State::Settings);
-            break;
-        case PauseMenu::Action::HowToPlay:
-            changeScene(State::HowToPlay);
-            break;
-        case PauseMenu::Action::EffectViewer:
-            changeScene(State::EffectViewer);
-            break;
-        case PauseMenu::Action::Title:
-            changeScene(State::Title);
-            break;
-        case PauseMenu::Action::Exit:
-            System::Exit();
-            break;
-        default:
-            break;
-        }
-
-        return;
-    }
-
-	// ===== オンライン対戦のネットワーク処理 =====
 	if (m_isOnlineMode && m_multiplayer)
 	{
 		m_multiplayer->update();
-		handleNetworkMessages();
 	}
 
-    // 使用後のクールダウン掃除
-    m_deck.cleanupCooldowns();
+	const double dt = Scene::DeltaTime();
 
-    // コスト回復（停止条件を考慮）
-    if (!BattleLogic::isRegenBlocked(m_state))
-    {
-        BattleLogic::regenCost(m_state, Scene::DeltaTime());
-    }
-
-    // 防御の継続時間チェック
-    if (m_state.defending && (m_state.defendTimer.sF() >= BattleState::DefendDurationSec))
-    {
-        m_state.defending = false;
-    }
-
-    // ---- メッセージ待機中は進行を止める ----
-    if (m_state.waitingForAcknowledge)
+	if (!BattleLogic::isRegenBlocked(m_state))
 	{
-		// バトル終了時はPvPモードでも自動的に遷移
-		if (m_state.nextAction == BattleState::NextAction::FinishBattle)
+		BattleLogic::regenCost(m_state, dt);
+	}
+
+	if (m_state.defending && (m_state.defendTimer.sF() >= BattleState::DefendDurationSec))
+	{
+		m_state.defending = false;
+	}
+
+	updateRemoteDefendState();
+	updateRemoteCost(dt);
+	updateLogs();
+
+	BattleInput input = collectBattleInput();
+
+	if (m_loop)
+	{
+		m_loop->update(input);
+	}
+
+	finishBattleIfNeeded();
+}
+
+Game::BattleInput Game::collectBattleInput()
+{
+	BattleInput input;
+	const Size sceneSize = Scene::Size();
+
+	const RoundRect attackBtn1 = BattleLayout::AttackOptionButton(sceneSize, 0);
+	const RoundRect attackBtn2 = BattleLayout::AttackOptionButton(sceneSize, 1);
+	const RoundRect attackBtn3 = BattleLayout::AttackOptionButton(sceneSize, 2);
+	const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
+	const RoundRect escapeBtn = BattleLayout::EscapeButton(sceneSize);
+	const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
+	const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+
+	if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
+	{
+		Cursor::RequestStyle(CursorStyle::Hand);
+	}
+
+	input.attack[0] = attackBtn1.leftClicked();
+	input.attack[1] = attackBtn2.leftClicked();
+	input.attack[2] = attackBtn3.leftClicked();
+	input.attack[3] = attackBtn4.leftClicked();
+	input.escape = escapeBtn.leftClicked();
+	input.defend = defendBtn.leftClicked();
+
+	return input;
+}
+
+void Game::updateLogs()
+{
+	const double now = Scene::Time();
+
+	for (int32 i = static_cast<int32>(m_eventLog.size()) - 1; i >= 0; --i)
+	{
+		if ((now - m_eventLog[i].timestamp) > LogDisplayDuration)
 		{
-			// 少し待機してから自動遷移
-			if (m_state.hitTimer.sF() > 2.0)
-			{
-				Console << U"[自動遷移] バトル終了 -> リザルト画面へ";
-				finishBattleIfNeeded();
-				return;
-			}
+			m_eventLog.erase(m_eventLog.begin() + i);
 		}
-		
-        if (BattleLogic::advanceInputDown())
-		{
-            m_state.waitingForAcknowledge = false;
-            if (m_state.nextAction == BattleState::NextAction::EnemyCounter)
-			{
-				// PvPモードでは敵の反撃はネットワーク経由で来るのでスキップ
-				if (!m_isOnlineMode)
-				{
-					BattleLogic::enemyCounter(m_state);
-				}
-			}
-            else if (m_state.nextAction == BattleState::NextAction::FinishBattle)
-			{
-				finishBattleIfNeeded();
-			}
-            else if (m_state.nextAction == BattleState::NextAction::BackToSelection)
-			{
-                // そのまま選択に戻る（使用カードを1枚だけ置き換え）
-                m_deck.replaceUsedCard();
-			}
-            m_state.nextAction = BattleState::NextAction::None;
-		}
+	}
+}
+
+void Game::pushLog(const String& message)
+{
+	m_eventLog.emplace_back(LogEntry{ message, Scene::Time() });
+
+	while (m_eventLog.size() > MaxLogEntries)
+	{
+		m_eventLog.erase(m_eventLog.begin());
+	}
+}
+
+void Game::updateRemoteCost(double deltaTime)
+{
+	if (!m_isHost)
+	{
 		return;
 	}
 
-    // 念のため：待機中でなく、置換待ちが残っていればここで実行
-    if (m_deck.hasPendingReplacement())
-    {
-        m_deck.replaceUsedCard();
-    }
-
-	// ---- カード補充（起動直後など空のとき） ----
-    if (m_deck.current().isEmpty() && m_deck.hasCards())
+	if (!m_remoteDefending)
 	{
-        m_deck.refillRandom(4);
+		m_remoteCostValue = Min(100.0, m_remoteCostValue + (BattleState::CostRegenPerSec * deltaTime));
+	}
+}
+
+void Game::updateRemoteDefendState()
+{
+	if (!m_isHost)
+	{
+		return;
 	}
 
-	// 詠唱は使用しない（即時反映）
+	if (m_remoteDefending && (Scene::Time() >= m_remoteDefendEndTime))
+	{
+		m_remoteDefending = false;
+	}
+}
 
-    // インターバル再抽選の制御は未使用のため削除
+double Game::remoteAvailableCost() const
+{
+	return m_isHost ? m_remoteCostValue : 0.0;
+}
 
-	// ---- PvE バトル更新 ----
-    const Size sceneSize = Scene::Size();
+void Game::consumeRemoteCost(double amount)
+{
+	if (!m_isHost)
+	{
+		return;
+	}
 
-    // 左上の攻撃ボタン群と逃げる（右端）
-    const RoundRect attackBtn1 = BattleLayout::AttackOptionButton(sceneSize, 0);
-    const RoundRect attackBtn2 = BattleLayout::AttackOptionButton(sceneSize, 1);
-    const RoundRect attackBtn3 = BattleLayout::AttackOptionButton(sceneSize, 2);
-    const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
-    const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
+	m_remoteCostValue = Max(0.0, m_remoteCostValue - amount);
+}
 
-    // 攻撃／逃げる／防御の入力
-    // 旧ホバー演出は未使用のため削除（escape のみ継続）
-    const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
-    const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
-    if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
-    {
-        Cursor::RequestStyle(CursorStyle::Hand);
-    }
+void Game::startRemoteDefend()
+{
+	if (!m_isHost)
+	{
+		return;
+	}
 
-    // 攻撃可否（防御中・待機中・インターバル中・コスト不足で不可）
-    if (attackBtn1.leftClicked())
-    {
-        const auto& cards = m_deck.current();
-        const bool hasCard = (cards.size() > 0);
-        if (hasCard)
-        {
-            const CardSpec& c = cards[0];
-            if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
-            {
-                const int32 damage = BattleUtils::slotDamage(0);
-                
-                Console << U"[攻撃1] ダメージ計算: " << damage;
-                
-                if (m_isOnlineMode)
-                {
-                    // PvPモード：ダメージを送信（敵のHPは減らさない）
-                    PlayerActionMessage msg;
-                    msg.type = MessageType::PlayerAction;
-                    msg.action = ActionType::Attack1;
-                    msg.damage = damage;
-                    msg.turnNumber = m_turnNumber;
-                    
-                    Console << U"[攻撃1送信] damage=" << msg.damage << U" action=" << (int)msg.action;
-                    m_multiplayer->send(msg);
-                    
-                    // 自分の状態（コスト消費など）を同期
-                    sendGameStateSync();
-                    
-                    m_state.battleMessage = Format(U"攻撃！ダメージ {}", damage);
-                    m_state.waitingForAcknowledge = true;
-                    m_state.nextAction = BattleState::NextAction::BackToSelection;
-                }
-                else
-                {
-                    // PvEモード：従来通りローカルで処理
-                    BattleLogic::handlePlayerAttack(m_state, damage);
-                }
-                
-                // 使用記録とクールダウン開始
-                m_deck.onUse(0);
-            }
-            else
-            {
-                m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-                m_state.waitingForAcknowledge = true;
-                m_state.nextAction = BattleState::NextAction::BackToSelection;
-            }
-        }
-        else
-        {
-            m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-        }
-    }
-    else if (attackBtn2.leftClicked())
-    {
-        const auto& cards = m_deck.current();
-        const bool hasCard = (cards.size() > 1);
-        if (hasCard)
-        {
-            const CardSpec& c = cards[1];
-            if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
-            {
-                const int32 damage = BattleUtils::slotDamage(1);
-                
-                if (m_isOnlineMode)
-                {
-                    PlayerActionMessage msg;
-                    msg.type = MessageType::PlayerAction;
-                    msg.action = ActionType::Attack2;
-                    msg.damage = damage;
-                    msg.turnNumber = m_turnNumber;
-                    m_multiplayer->send(msg);
-                    
-                    sendGameStateSync();
-                    
-                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
-                    m_state.waitingForAcknowledge = true;
-                    m_state.nextAction = BattleState::NextAction::BackToSelection;
-                }
-                else
-                {
-                    BattleLogic::handlePlayerAttack(m_state, damage);
-                }
-                
-                m_deck.onUse(1);
-            }
-            else
-            {
-                m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-                m_state.waitingForAcknowledge = true;
-                m_state.nextAction = BattleState::NextAction::BackToSelection;
-            }
-        }
-        else
-        {
-            m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-        }
-    }
-    else if (attackBtn3.leftClicked())
-    {
-        const auto& cards = m_deck.current();
-        const bool hasCard = (cards.size() > 2);
-        if (hasCard)
-        {
-            const CardSpec& c = cards[2];
-            if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
-            {
-                const int32 damage = BattleUtils::slotDamage(2);
-                
-                if (m_isOnlineMode)
-                {
-                    PlayerActionMessage msg;
-                    msg.type = MessageType::PlayerAction;
-                    msg.action = ActionType::Attack3;
-                    msg.damage = damage;
-                    msg.turnNumber = m_turnNumber;
-                    m_multiplayer->send(msg);
-                    
-                    sendGameStateSync();
-                    
-                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
-                    m_state.waitingForAcknowledge = true;
-                    m_state.nextAction = BattleState::NextAction::BackToSelection;
-                }
-                else
-                {
-                    BattleLogic::handlePlayerAttack(m_state, damage);
-                }
-                
-                m_deck.onUse(2);
-            }
-            else
-            {
-                m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-                m_state.waitingForAcknowledge = true;
-                m_state.nextAction = BattleState::NextAction::BackToSelection;
-            }
-        }
-        else
-        {
-            m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-        }
-    }
-    else if (attackBtn4.leftClicked())
-    {
-        const auto& cards = m_deck.current();
-        const bool hasCard = (cards.size() > 3);
-        if (hasCard)
-        {
-            const CardSpec& c = cards[3];
-            if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
-            {
-                const int32 damage = BattleUtils::slotDamage(3);
-                
-                if (m_isOnlineMode)
-                {
-                    PlayerActionMessage msg;
-                    msg.type = MessageType::PlayerAction;
-                    msg.action = ActionType::Attack4;
-                    msg.damage = damage;
-                    msg.turnNumber = m_turnNumber;
-                    m_multiplayer->send(msg);
-                    
-                    sendGameStateSync();
-                    
-                    m_state.battleMessage = Format(U"攻撃！ダメージ ", damage);
-                    m_state.waitingForAcknowledge = true;
-                    m_state.nextAction = BattleState::NextAction::BackToSelection;
-                }
-                else
-                {
-                    BattleLogic::handlePlayerAttack(m_state, damage);
-                }
-                
-                m_deck.onUse(3);
-            }
-            else
-            {
-                m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-                m_state.waitingForAcknowledge = true;
-                m_state.nextAction = BattleState::NextAction::BackToSelection;
-            }
-        }
-        else
-        {
-            m_state.battleMessage = m_state.defending ? U"防御中は攻撃できない！" : U"コスト不足！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-        }
-    }
-    else if (escapeBtn.leftClicked())
-    {
-        // 敗北として終了（メッセージ表示）
-        m_state.playerHP = 0;
-        m_state.battleMessage = U"プレイヤーは逃げ出した！";
-        m_state.waitingForAcknowledge = true;
-        m_state.nextAction = BattleState::NextAction::FinishBattle;
-    }
-    else if (defendBtn.leftClicked())
-    {
-        if (BattleLogic::canDefend(m_state) && BattleLogic::trySpendCost(m_state, 20))
-        {
-            m_state.defending = true;
-            m_state.defendTimer.restart();
-            m_state.battleMessage = U"防御体勢に入った！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-            if (m_isOnlineMode)
-            {
-                sendGameStateSync();
-            }
-        }
-        else if (!m_state.defending)
-        {
-            m_state.battleMessage = U"コスト不足！";
-            m_state.waitingForAcknowledge = true;
-            m_state.nextAction = BattleState::NextAction::BackToSelection;
-        }
-    }
+	m_remoteDefending = true;
+	m_remoteDefendEndTime = Scene::Time() + BattleState::DefendDurationSec;
+}
+
+void Game::performPvEEnemyCounter()
+{
+	const int32 baseDamage = s3d::Random(8, 16);
+	const int32 finalDamage = m_state.defending ? 0 : baseDamage;
+	handleEnemyAttack(finalDamage, net::BattleEventType::ClientAttackDamage, false);
+}
+
+
+void Game::finishBattleIfNeeded()
+{
+	if ((m_state.playerHP <= 0) || (m_state.enemyHP <= 0))
+	{
+		concludeBattle(net::BattleEndReason::HPZero, (m_state.playerHP > 0));
+	}
+}
+
+void Game::concludeBattle(net::BattleEndReason reason, bool hostWon)
+{
+	if (m_isOnlineMode && m_multiplayer && m_multiplayer->isConnected() && m_isHost)
+	{
+		net::BattleEndMessage msg{};
+		msg.hostFinalHP = m_state.playerHP;
+		msg.clientFinalHP = m_state.enemyHP;
+		msg.hostWon = hostWon ? 1 : 0;
+		msg.reason = reason;
+		m_multiplayer->send(msg);
+	}
+
+	getData().lastMode = m_isOnlineMode ? GameData::GameMode::PvP : GameData::GameMode::PvE;
+	getData().lastScore = Max(0, m_state.playerHP);
+	changeScene(State::Result);
+}
+
+void Game::sendStateSync()
+{
+	if (!(m_isOnlineMode && m_isHost && m_multiplayer && m_multiplayer->isConnected()))
+	{
+		return;
+	}
+
+	net::StateSnapshotMessage msg{};
+	msg.hostHP = m_state.playerHP;
+	msg.clientHP = m_state.enemyHP;
+	msg.hostCost = static_cast<float>(m_state.costValue);
+	msg.hostDefendTime = static_cast<float>(m_state.defendTimer.sF());
+	msg.hostDefending = m_state.defending ? 1 : 0;
+	msg.hostCrazy = m_state.playerCrazy;
+	msg.clientCrazy = m_state.enemyCrazy;
+	msg.clientCost = static_cast<float>(m_remoteCostValue);
+	msg.clientDefendTime = m_remoteDefending ? static_cast<float>(Max(0.0, m_remoteDefendEndTime - Scene::Time())) : 0.0f;
+	msg.clientDefending = m_remoteDefending ? 1 : 0;
+	msg.isHostTurn = 0;
+	msg.turnNumber = 0;
+
+	m_multiplayer->send(msg);
+}
+
+void Game::applyStateSync(const net::StateSnapshotMessage& msg)
+{
+	m_state.playerHP = msg.clientHP;
+	m_state.enemyHP = msg.hostHP;
+	m_state.costValue = msg.clientCost;
+	m_state.playerCrazy = msg.clientCrazy;
+	m_state.enemyCrazy = msg.hostCrazy;
+	m_state.defending = (msg.clientDefending != 0);
+
+	if (m_state.defending)
+	{
+		m_state.defendTimer.restart();
+	}
+	else
+	{
+		m_state.defendTimer.reset();
+	}
+
+	if (!m_isHost)
+	{
+		m_remoteCostValue = msg.hostCost;
+	}
+}
+
+void Game::broadcastEventToClient(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags)
+{
+	if (!(m_isOnlineMode && m_isHost && m_multiplayer && m_multiplayer->isConnected()))
+	{
+		return;
+	}
+
+	net::BattleEventMessage msg{};
+	msg.eventType = type;
+	msg.primaryValue = primaryValue;
+	msg.secondaryValue = secondaryValue;
+	msg.flags = flags;
+
+	m_multiplayer->send(msg);
+}
+
+void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags)
+{
+	bool localPerspective = true;
+	if (m_isOnlineMode)
+	{
+		const bool localIsHost = m_isHost;
+		switch (type)
+		{
+		case net::BattleEventType::HostAttackDamage:
+		case net::BattleEventType::HostAttackBlocked:
+		case net::BattleEventType::HostActionRejected:
+		case net::BattleEventType::HostDefend:
+		case net::BattleEventType::HostEscape:
+			localPerspective = localIsHost;
+			break;
+		case net::BattleEventType::ClientAttackDamage:
+		case net::BattleEventType::ClientAttackBlocked:
+		case net::BattleEventType::ClientActionRejected:
+		case net::BattleEventType::ClientDefend:
+		case net::BattleEventType::ClientEscape:
+			localPerspective = !localIsHost;
+			break;
+		default:
+			localPerspective = localIsHost;
+			break;
+		}
+	}
+
+	const String message = renderBattleEvent(type, primaryValue, secondaryValue, flags, localPerspective);
+	if (!message.isEmpty())
+	{
+		pushLog(message);
+		m_state.battleMessage = message;
+	}
+
+	if (flags & net::EventFlagHitEnemy)
+	{
+		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
+	}
+	else if (flags & net::EventFlagHitPlayer)
+	{
+		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+	}
+}
+
+String Game::renderBattleEvent(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags, bool localPerspective) const
+{
+	switch (type)
+	{
+	case net::BattleEventType::HostAttackDamage:
+		return localPerspective ? U"攻撃成功！{}ダメージ！"_fmt(primaryValue)
+			: U"相手の攻撃！{}ダメージ！"_fmt(primaryValue);
+	case net::BattleEventType::HostAttackBlocked:
+		return localPerspective ? U"攻撃は防がれた…" : U"相手の攻撃を防いだ！";
+	case net::BattleEventType::HostActionRejected:
+		switch (primaryValue)
+		{
+		case 0: return localPerspective ? U"コストが足りない！" : U"相手はコスト不足だ";
+		case 1: return localPerspective ? U"防御中は行動できない" : U"相手は行動できなかった";
+		case 2: return localPerspective ? U"今はその行動を受け付けていない" : U"相手は不正なタイミングで行動した";
+		default: return localPerspective ? U"その行動はできない" : U"相手の行動は無効化された";
+		}
+	case net::BattleEventType::HostDefend:
+		return localPerspective ? U"防御体勢に入った！" : U"相手が防御した";
+	case net::BattleEventType::HostEscape:
+		return localPerspective ? U"逃走を試みた！" : U"相手が逃げ出そうとしている";
+	case net::BattleEventType::ClientAttackDamage:
+		return localPerspective ? U"攻撃成功！{}ダメージ！"_fmt(primaryValue)
+			: U"相手の攻撃！{}ダメージ！"_fmt(primaryValue);
+	case net::BattleEventType::ClientAttackBlocked:
+		return localPerspective ? U"攻撃は防がれた…" : U"相手の攻撃を防いだ！";
+	case net::BattleEventType::ClientActionRejected:
+		switch (primaryValue)
+		{
+		case 0: return localPerspective ? U"コストが足りない！" : U"相手はコスト不足だ";
+		case 1: return localPerspective ? U"防御中は行動できない" : U"相手は行動できなかった";
+		case 2: return localPerspective ? U"今はその行動が使えない" : U"相手の行動は無効なタイミングだった";
+		default: return localPerspective ? U"その行動はできない" : U"相手の行動は無効化された";
+		}
+	case net::BattleEventType::ClientDefend:
+		return localPerspective ? U"防御体勢に入った！" : U"相手が防御した";
+	case net::BattleEventType::ClientEscape:
+		return localPerspective ? U"逃走を試みた！" : U"相手が逃げ出そうとしている";
+	case net::BattleEventType::TurnChanged:
+		return U"";
+	default:
+		return U"";
+	}
+}
+
+void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
+{
+	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
+	m_state.enemyHP = Max(0, m_state.enemyHP - damage);
+	BattleLogic::addCrazy(m_state, true, +20);
+	BattleLogic::addCrazy(m_state, false, -10);
+	m_deck.onUse(slotIndex);
+
+	const uint32 flags = net::EventFlagHitEnemy;
+	emitLocalEvent(eventType, damage, slotIndex, flags);
+
+	if (broadcastToClient)
+	{
+		sendStateSync();
+		broadcastEventToClient(eventType, damage, slotIndex, flags);
+	}
+
+	replaceUsedCardIfNeeded();
+	finishBattleIfNeeded();
+}
+
+void Game::handleActionRejected(int reasonCode, net::BattleEventType eventType, bool broadcastToClient)
+{
+	const uint32 flags = 0;
+	emitLocalEvent(eventType, reasonCode, 0, flags);
+
+	if (broadcastToClient)
+	{
+		broadcastEventToClient(eventType, reasonCode, 0, flags);
+	}
+}
+
+void Game::handleDefend(net::BattleEventType eventType, bool broadcastToClient)
+{
+	if (eventType == net::BattleEventType::HostDefend)
+	{
+		m_state.defending = true;
+		m_state.defendTimer.restart();
+	}
+
+	const uint32 flags = 0;
+	emitLocalEvent(eventType, 0, 0, flags);
+
+	if (broadcastToClient)
+	{
+		sendStateSync();
+		broadcastEventToClient(eventType, 0, 0, flags);
+	}
+}
+
+void Game::handleEscape(net::BattleEventType eventType, bool broadcastToClient)
+{
+	if (eventType == net::BattleEventType::HostEscape)
+	{
+		m_state.playerHP = 0;
+	}
+	else
+	{
+		m_state.enemyHP = 0;
+	}
+
+	const uint32 flags = 0;
+	emitLocalEvent(eventType, 0, 0, flags);
+
+	if (broadcastToClient)
+	{
+		sendStateSync();
+		broadcastEventToClient(eventType, 0, 0, flags);
+	}
+
+	finishBattleIfNeeded();
+}
+
+void Game::handleEnemyAttack(int32 damage, net::BattleEventType eventType, bool broadcastToClient)
+{
+	m_state.playerHP = Max(0, m_state.playerHP - damage);
+	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+	BattleLogic::addCrazy(m_state, false, +20);
+
+	const uint32 flags = net::EventFlagHitPlayer;
+	emitLocalEvent(eventType, damage, 0, flags);
+
+	if (broadcastToClient)
+	{
+		sendStateSync();
+		broadcastEventToClient(eventType, damage, 0, flags);
+	}
+
+	finishBattleIfNeeded();
+}
+
+void Game::replaceUsedCardIfNeeded()
+{
+	if (m_deck.hasPendingReplacement())
+	{
+		m_deck.replaceUsedCard();
+	}
+}
+
+void Game::updatePausedUI()
+{
+	const PauseMenu::Action action = m_pauseMenu.update();
+	switch (action)
+	{
+	case PauseMenu::Action::Resume:
+		m_paused = false;
+		break;
+	case PauseMenu::Action::Settings:
+		changeScene(State::Settings);
+		break;
+	case PauseMenu::Action::HowToPlay:
+		changeScene(State::HowToPlay);
+		break;
+	case PauseMenu::Action::EffectViewer:
+		changeScene(State::EffectViewer);
+		break;
+	case PauseMenu::Action::Title:
+		changeScene(State::Title);
+		break;
+	case PauseMenu::Action::Exit:
+		System::Exit();
+		break;
+	default:
+		break;
+	}
 }
 
 void Game::draw() const
 {
-    const Size sceneSize = Scene::Size();
+	const Size sceneSize = Scene::Size();
 
-    if ((not m_sceneRT) || (m_sceneRT.size() != sceneSize))
+	if ((!m_sceneRT) || (m_sceneRT.size() != sceneSize))
 	{
 		const_cast<Game*>(this)->m_sceneRT = RenderTexture{ sceneSize };
 	}
-	if ((not m_blurInternal) || (m_blurInternal.size() != sceneSize))
+	if ((!m_blurInternal) || (m_blurInternal.size() != sceneSize))
 	{
 		const_cast<Game*>(this)->m_blurInternal = RenderTexture{ sceneSize };
 	}
-	if ((not m_blurTarget) || (m_blurTarget.size() != sceneSize))
+	if ((!m_blurTarget) || (m_blurTarget.size() != sceneSize))
 	{
 		const_cast<Game*>(this)->m_blurTarget = RenderTexture{ sceneSize };
 	}
 
-    // レイアウト計算（ui に委譲）
-    const Vec2 playerPos = BattleLayout::PlayerPos(sceneSize);
-    const Vec2 enemyPos = BattleLayout::EnemyPos(sceneSize);
-    const Size entitySize = BattleLayout::EntitySize;
+	const Vec2 playerPos = BattleLayout::PlayerPos(sceneSize);
+	const Vec2 enemyPos = BattleLayout::EnemyPos(sceneSize);
+	const Size entitySize = BattleLayout::EntitySize;
 
-    const int32 playerHPWidth = static_cast<int32>(Math::Round(BattleLayout::HPBarWidth * (static_cast<double>(m_state.playerHP) / BattleState::MaxHP)));
-    const int32 enemyHPWidth  = static_cast<int32>(Math::Round(BattleLayout::HPBarWidth * (static_cast<double>(m_state.enemyHP) / BattleState::MaxHP)));
-
-    // 旧ボタン変数の残存参照を削除済み
+	const int32 playerHPWidth = static_cast<int32>(Math::Round(BattleLayout::HPBarWidth * (static_cast<double>(m_state.playerHP) / BattleState::MaxHP)));
+	const int32 enemyHPWidth = static_cast<int32>(Math::Round(BattleLayout::HPBarWidth * (static_cast<double>(m_state.enemyHP) / BattleState::MaxHP)));
 
 	{
 		const ScopedRenderTarget2D rt{ m_sceneRT };
 		m_sceneRT.clear(ColorF{ 1.0 });
 
-        // キャラ矩形
-		{
-            // 被弾フラッシュ演出
-            const double t = m_state.hitTimer.sF();
-            const bool hitPlayer = (m_state.hitTarget == BattleState::HitTarget::Player) && (t < BattleState::HitDuration);
-            const bool hitEnemy  = (m_state.hitTarget == BattleState::HitTarget::Enemy)  && (t < BattleState::HitDuration);
-			const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
-            const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
-            const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
-			const RectF pRect{ playerPos, BattleLayout::EntitySize };
-			const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
-			drawFit(m_texPlayer, pRect, playerColor);
-			drawFit(m_texEnemy,  eRect,  enemyColor);
-		}
+		const double t = m_state.hitTimer.sF();
+		const bool hitPlayer = (m_state.hitTarget == BattleState::HitTarget::Player) && (t < BattleState::HitDuration);
+		const bool hitEnemy = (m_state.hitTarget == BattleState::HitTarget::Enemy) && (t < BattleState::HitDuration);
+		const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
+		const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
+		const ColorF enemyColor = hitEnemy ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
+		const RectF pRect{ playerPos, BattleLayout::EntitySize };
+		const RectF eRect{ enemyPos, BattleLayout::EntitySize };
+		drawFit(m_texPlayer, pRect, playerColor);
+		drawFit(m_texEnemy, eRect, enemyColor);
 
 		const Font& bold = FontAsset(U"Bold");
 
-        // HPバー（自分・頭上）
-        const RectF playerHPBar = BattleLayout::PlayerHPBarBG(sceneSize);
-        const ColorF playerHPColor = BattleUtils::hpColor(m_state.playerHP, BattleState::MaxHP);
-        playerHPBar.draw(ColorF{ 0.2 });
-        RectF{ playerHPBar.x, playerHPBar.y, static_cast<double>(playerHPWidth), BattleLayout::HPBarHeight }.draw(playerHPColor);
-        bold(U"HP {}/{}"_fmt(m_state.playerHP, BattleState::MaxHP)).draw(16, BattleLayout::PlayerHPLabelPos(sceneSize), ColorF{ 0.95 });
+		const RectF playerHPBar = BattleLayout::PlayerHPBarBG(sceneSize);
+		const ColorF playerHPColor = BattleUtils::hpColor(m_state.playerHP, BattleState::MaxHP);
+		playerHPBar.draw(ColorF{ 0.2 });
+		RectF{ playerHPBar.x, playerHPBar.y, static_cast<double>(playerHPWidth), BattleLayout::HPBarHeight }.draw(playerHPColor);
+		bold(U"HP {}/{}"_fmt(m_state.playerHP, BattleState::MaxHP)).draw(16, BattleLayout::PlayerHPLabelPos(sceneSize), ColorF{ 0.95 });
 
-        // HPバー（敵・頭上）
-        const RectF enemyHPBar = BattleLayout::EnemyHPBarBG(sceneSize);
-        const ColorF enemyHPColor = BattleUtils::hpColor(m_state.enemyHP, BattleState::MaxHP);
-        enemyHPBar.draw(ColorF{ 0.2 });
-        RectF{ enemyHPBar.x, enemyHPBar.y, static_cast<double>(enemyHPWidth), BattleLayout::HPBarHeight }.draw(enemyHPColor);
-        bold(U"HP {}/{}"_fmt(m_state.enemyHP, BattleState::MaxHP)).draw(16, BattleLayout::EnemyHPLabelPos(sceneSize), ColorF{ 0.95 });
+		const RectF enemyHPBar = BattleLayout::EnemyHPBarBG(sceneSize);
+		const ColorF enemyHPColor = BattleUtils::hpColor(m_state.enemyHP, BattleState::MaxHP);
+		enemyHPBar.draw(ColorF{ 0.2 });
+		RectF{ enemyHPBar.x, enemyHPBar.y, static_cast<double>(enemyHPWidth), BattleLayout::HPBarHeight }.draw(enemyHPColor);
+		bold(U"HP {}/{}"_fmt(m_state.enemyHP, BattleState::MaxHP)).draw(16, BattleLayout::EnemyHPLabelPos(sceneSize), ColorF{ 0.95 });
 
-        // クレイジーゲージ（プレイヤー）
-        {
-            const Vec2 c = BattleLayout::PlayerCrazyCenter(sceneSize);
-            const double ratio = Clamp(m_state.playerCrazy / 100.0, 0.0, 1.0);
-            Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
-            const double angle = Math::TwoPiF * ratio;
-            Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 0.2, 0.6, 1.0 });
-            // 顔テクスチャ
-            const s3d::Texture& face = m_faces.select(m_state.playerCrazy);
-            const double s = 26.0;
-            face.scaled(s / face.height()).drawAt(c);
-        }
+		{
+			const Vec2 c = BattleLayout::PlayerCrazyCenter(sceneSize);
+			const double ratio = Clamp(m_state.playerCrazy / 100.0, 0.0, 1.0);
+			Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
+			const double angle = Math::TwoPiF * ratio;
+			Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 0.2, 0.6, 1.0 });
+			const s3d::Texture& face = m_faces.select(m_state.playerCrazy);
+			const double s = 26.0;
+			face.scaled(s / face.height()).drawAt(c);
+		}
 
-        // クレイジーゲージ（敵）
-        {
-            const Vec2 c = BattleLayout::EnemyCrazyCenter(sceneSize);
-            const double ratio = Clamp(m_state.enemyCrazy / 100.0, 0.0, 1.0);
-            Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
-            const double angle = Math::TwoPiF * ratio;
-            Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 1.0, 0.4, 0.4 });
-            const s3d::Texture& face = m_faces.select(m_state.enemyCrazy);
-            const double s = 26.0;
-            face.scaled(s / face.height()).drawAt(c);
-        }
+		{
+			const Vec2 c = BattleLayout::EnemyCrazyCenter(sceneSize);
+			const double ratio = Clamp(m_state.enemyCrazy / 100.0, 0.0, 1.0);
+			Circle{ c, BattleLayout::CrazyRingRadius }.drawFrame(6, 0, ColorF{ 0.85 });
+			const double angle = Math::TwoPiF * ratio;
+			Circle{ c, BattleLayout::CrazyRingRadius }.drawArc(-Math::HalfPi, angle, 6, 0, ColorF{ 1.0, 0.4, 0.4 });
+			const s3d::Texture& face = m_faces.select(m_state.enemyCrazy);
+			const double s = 26.0;
+			face.scaled(s / face.height()).drawAt(c);
+		}
 
-        // 左上の攻撃1〜4（背景色統一）
-        const RoundRect attackBtn1 = BattleLayout::AttackOptionButton(sceneSize, 0);
-        const RoundRect attackBtn2 = BattleLayout::AttackOptionButton(sceneSize, 1);
-        const RoundRect attackBtn3 = BattleLayout::AttackOptionButton(sceneSize, 2);
-        const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
-        const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
-        const ColorF actionBg{ 1.0 };
-        const bool disabledAll = (m_state.waitingForAcknowledge || m_state.defending);
+		const RoundRect attackBtn1 = BattleLayout::AttackOptionButton(sceneSize, 0);
+		const RoundRect attackBtn2 = BattleLayout::AttackOptionButton(sceneSize, 1);
+		const RoundRect attackBtn3 = BattleLayout::AttackOptionButton(sceneSize, 2);
+		const RoundRect attackBtn4 = BattleLayout::AttackOptionButton(sceneSize, 3);
+		const RoundRect escapeBtn = BattleLayout::EscapeButton(sceneSize);
+		const ColorF actionBg{ 1.0 };
+		const bool disabledAll = m_state.defending;
 
-        auto drawSlot = [&](const RoundRect& rr, int slot)
-        {
-            const auto& cards = m_deck.current();
-            const auto& last  = m_deck.lastDisplayed();
-            const bool hasCurrent = (slot < static_cast<int>(cards.size()));
-            const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
-            const bool hasAny = hasCurrent || hasLast;
-            const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
-            rr.draw(base).drawFrame(2);
+		auto drawSlot = [&](const RoundRect& rr, int slot)
+		{
+			const auto& cards = m_deck.current();
+			const auto& last = m_deck.lastDisplayed();
+			const bool hasCurrent = (slot < static_cast<int>(cards.size()));
+			const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
+			const bool hasAny = hasCurrent || hasLast;
+			const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
+			rr.draw(base).drawFrame(2);
 			String title;
 			if (hasAny)
 			{
-                const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
-				title = (c.name.isEmpty() ? U"攻撃"_fmt(slot + 1) : c.name);
+				const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
+				title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
 			}
 			else
 			{
-				title = U"攻撃"_fmt(slot + 1);
+				title = U"攻撃{}"_fmt(slot + 1);
 			}
-            const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
-            bold(title).drawAt(20, rr.center(), txt);
-        };
+			const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
+			FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
+		};
 
-        drawSlot(attackBtn1, 0);
-        drawSlot(attackBtn2, 1);
-        drawSlot(attackBtn3, 2);
-        drawSlot(attackBtn4, 3);
-        
-        // 逃げる（右端）
-		escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() }); BaseFrame().draw(escapeBtn.rect);
-        bold(U"逃げる").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
+		drawSlot(attackBtn1, 0);
+		drawSlot(attackBtn2, 1);
+		drawSlot(attackBtn3, 2);
+		drawSlot(attackBtn4, 3);
 
-        // 左上：コストボックス
-        const RectF costPanel = BattleLayout::CostPanelRect(sceneSize);
-        const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
-        costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
-        const int32 cost = m_state.cost();
-        
-        const double w = costPanel.w - 24;
-        const RectF barBG{ costPanel.x + 12, costPanel.y + costPanel.h - 22, w, 10 };
-        const RectF barFG{ barBG.x, barBG.y, w * (cost / 100.0), barBG.h };
-        const bool blocked = BattleLogic::isRegenBlocked(m_state);
-        barBG.draw(ColorF{ 0.85 });
-        barFG.draw(blocked ? ColorF{ 0.6 } : ColorF{ 0.2, 0.6, 1.0 });
-        FontAsset(U"Bold")(U"COST {}/100"_fmt(cost)).draw(20, Vec2{ costPanel.x + 12, costPanel.y + 10 }, ColorF{ 0.1 });
+		escapeBtn.draw(ColorF{ 1.0, m_escapeTr.value() });
+		BaseFrame().draw(escapeBtn.rect);
+		FontAsset(U"Bold")(U"逃走").drawAt(24, escapeBtn.center(), ColorF{ 0.1 });
 
-        // デバッグ表示は削除済み
+		const RectF costPanel = BattleLayout::CostPanelRect(sceneSize);
+		const RoundRect costRR{ costPanel, BattleLayout::CostPanelR };
+		costRR.draw(ColorF{ 1.0, 0.95 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+		const int32 cost = m_state.cost();
 
-        // 左下プレイヤーパネル
-        const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
-        const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
-		panelRR.draw(ColorF{ 1.0, 0.95 }); BaseFrame().draw(panelRR.rect);
-        BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
-        const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
-        defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
-        bold(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+		const double w = costPanel.w - 24;
+		const RectF barBG{ costPanel.x + 12, costPanel.y + costPanel.h - 22, w, 10 };
+		const RectF barFG{ barBG.x, barBG.y, w * (cost / 100.0), barBG.h };
+		const bool blocked = BattleLogic::isRegenBlocked(m_state);
+		barBG.draw(ColorF{ 0.85 });
+		barFG.draw(blocked ? ColorF{ 0.6 } : ColorF{ 0.2, 0.6, 1.0 });
+		FontAsset(U"Bold")(U"COST {}/100"_fmt(cost)).draw(20, Vec2{ costPanel.x + 12, costPanel.y + 10 }, ColorF{ 0.1 });
 
+		const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
+		const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
+		panelRR.draw(ColorF{ 1.0, 0.95 });
+		BaseFrame().draw(panelRR.rect);
+		BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
+		const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+		defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
+		FontAsset(U"Bold")(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
 
-		// メッセージウィンドウ
-        if (m_state.waitingForAcknowledge)
+		if (!m_eventLog.isEmpty())
 		{
-			const double panelW = sceneSize.x - 40;
-			const double panelH = 110;
-			const double panelX = (sceneSize.x - panelW) / 2.0;
-			const double panelY = sceneSize.y - 8 - panelH;
-			const RoundRect msgPanel{ RectF{ panelX, panelY, panelW, panelH }, 8 };
-			msgPanel.draw(ColorF{ 0.95, 0.95, 0.96, 0.94 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
-            FontAsset(U"Bold")(m_state.battleMessage).draw(24, Vec2{ msgPanel.rect.x + 20, msgPanel.rect.y + 20 }, ColorF{ 0.1 });
-			FontAsset(U"Bold")(U"キー入力で進む").draw(18, Vec2{ msgPanel.rect.x + 20, msgPanel.rect.y + 64 }, ColorF{ 0.2 });
+			const double panelMargin = 20.0;
+			const double lineHeight = 22.0;
+			const size_t displayCount = m_eventLog.size();
+			const double panelWidth = sceneSize.x - (panelMargin * 2.0);
+			const double panelHeight = 16.0 + (lineHeight * displayCount) + 16.0;
+			const double panelX = panelMargin;
+			const double panelY = sceneSize.y - 12.0 - panelHeight;
+
+			const RoundRect logPanel{ RectF{ panelX, panelY, panelWidth, panelHeight }, 8.0 };
+			logPanel.draw(ColorF{ 0.95, 0.95, 0.96, 0.9 }).drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+
+			const double now = Scene::Time();
+			Vec2 cursor{ panelX + 20.0, panelY + 18.0 };
+			const size_t startIndex = (displayCount > MaxLogEntries) ? (displayCount - MaxLogEntries) : 0;
+
+			for (size_t i = startIndex; i < displayCount; ++i)
+			{
+				const auto& entry = m_eventLog[i];
+				const double age = now - entry.timestamp;
+				const double fade = Clamp(1.0 - (age / LogDisplayDuration), 0.0, 1.0);
+				const double alpha = 0.35 + (0.65 * fade);
+				const bool isLatest = (i + 1 == displayCount);
+				const ColorF textColor = isLatest
+					? ColorF{ 0.1, 0.1, 0.1, alpha }
+					: ColorF{ 0.15, 0.15, 0.2, alpha };
+
+				const double fontSize = isLatest ? 20.0 : 18.0;
+				FontAsset(U"Bold")(entry.message).draw(fontSize, cursor, textColor);
+				cursor.y += lineHeight;
+			}
 		}
+
 	}
 
-    if (m_paused)
-    {
-        Shader::GaussianBlur(m_sceneRT, m_blurInternal, m_blurTarget, BoxFilterSize::BoxFilter9x9);
-        m_blurTarget.draw();
-        Rect{ sceneSize }.draw(PauseTheme::Dimmer);
-        m_pauseMenu.draw();
-        Cursor::RequestStyle(CursorStyle::Default);
-    }
+	if (m_paused)
+	{
+		Shader::GaussianBlur(m_sceneRT, m_blurInternal, m_blurTarget, BoxFilterSize::BoxFilter9x9);
+		m_blurTarget.draw();
+		Rect{ sceneSize }.draw(PauseTheme::Dimmer);
+		m_pauseMenu.draw();
+		Cursor::RequestStyle(CursorStyle::Default);
+	}
 	else
 	{
 		m_sceneRT.draw();
 		Cursor::RequestStyle(CursorStyle::Default);
 	}
-	ScreenFrame().draw(s3d::RectF{ 0, 0, (double)Scene::Width(), (double)Scene::Height() });
-}
-void Game::finishBattleIfNeeded()
-{
-	if ((m_state.playerHP <= 0) || (m_state.enemyHP <= 0))
-	{
-		getData().lastMode = m_isOnlineMode ? GameData::GameMode::PvP : GameData::GameMode::PvE;
-		getData().lastScore = Max(0, m_state.playerHP);
-		changeScene(State::Result);
-	}
-}
-
-void Game::handleNetworkMessages()
-{
-	if (!m_multiplayer)
-		return;
-
-	// 全てのメッセージを処理（キューが空になるまで）
-	while (true)
-	{
-		auto msgType = m_multiplayer->peekMessageType();
-		if (!msgType)
-			break;  // メッセージがなければ終了
-
-		Console << U"[handleNetworkMessages] メッセージタイプ: " << (int)*msgType;
-
-		switch (*msgType)
-		{
-		case MessageType::PlayerAction:
-		{
-			auto msg = m_multiplayer->receive<PlayerActionMessage>();
-			if (msg)
-			{
-				// 相手の攻撃を受信（damageフィールドを使用）
-				int32 damage = msg->damage;
-				
-				Console << U"[PlayerAction受信] damage=" << damage << U" 現在のplayerHP=" << m_state.playerHP;
-				
-				if (damage > 0)
-				{
-					// 防御中なら半減
-					if (m_state.defending)
-					{
-						damage = damage / 2;
-						m_state.battleMessage = U"相手の攻撃！ダメージ " + Format(damage) + U"（防御で半減）";
-					}
-					else
-					{
-						m_state.battleMessage = U"相手の攻撃！ダメージ " + Format(damage);
-					}
-					
-					m_state.playerHP -= damage;
-					m_state.hitTarget = BattleState::HitTarget::Player;
-					m_state.hitTimer.restart();
-					
-					Console << U"[ダメージ適用後] playerHP=" << m_state.playerHP;
-					
-					// 被ダメージ後、自分の状態を同期
-					sendGameStateSync();
-					
-					// ゲーム終了チェック
-					if (m_state.playerHP <= 0)
-					{
-						m_state.nextAction = BattleState::NextAction::FinishBattle;
-					}
-					else
-					{
-						m_state.nextAction = BattleState::NextAction::EnemyCounter;
-					}
-					
-					m_state.waitingForAcknowledge = true;
-				}
-			}
-		}
-		break;
-
-	case MessageType::GameStateSync:
-		{
-			auto msg = m_multiplayer->receive<GameStateSyncMessage>();
-			if (msg)
-			{
-				// デバッグ出力
-				Console << U"[GameStateSync受信] isHost=" << m_isHost 
-					  << U" hostHP=" << msg->hostHP 
-					  << U" clientHP=" << msg->clientHP
-					  << U" 現在のenemyHP=" << m_state.enemyHP;
-				
-				// 相手（enemy）の状態だけを更新し、自分の状態は更新しない
-				// add_networkブランチと同じ実装
-				if (m_isHost)
-				{
-					// ホストの場合：相手がclientなので、client側の情報だけを更新
-					m_state.enemyHP = msg->clientHP;
-					m_state.enemyCrazy = msg->clientCrazy;
-					Console << U"[ホスト] enemyHPを更新: " << m_state.enemyHP;
-				}
-				else
-				{
-					// クライアントの場合：相手がhostなので、host側の情報だけを更新
-					m_state.enemyHP = msg->hostHP;
-					m_state.enemyCrazy = msg->hostCrazy;
-					Console << U"[クライアント] enemyHPを更新: " << m_state.enemyHP;
-				}
-				m_turnNumber = msg->turnNumber;
-				
-				// 相手のHPが0以下になったら勝利
-				if (m_state.enemyHP <= 0)
-				{
-					Console << U"[勝利判定] 相手のHPが0以下になりました";
-					m_state.battleMessage = U"勝利！";
-					m_state.nextAction = BattleState::NextAction::FinishBattle;
-					m_state.waitingForAcknowledge = true;
-				}
-			}
-		}
-		break;
-
-	case MessageType::TurnChange:
-		{
-			auto msg = m_multiplayer->receive<TurnChangeMessage>();
-			if (msg)
-			{
-				m_turnNumber = msg->turnNumber;
-				m_isMyTurn = (m_isHost == msg->isHostTurn);
-			}
-		}
-		break;
-
-	case MessageType::BattleEnd:
-		{
-			auto msg = m_multiplayer->receive<BattleEndMessage>();
-			if (msg)
-			{
-				// バトル終了処理
-				getData().lastMode = GameData::GameMode::PvP;
-				getData().lastScore = m_isHost ? msg->hostFinalHP : msg->clientFinalHP;
-				changeScene(State::Result);
-			}
-		}
-		break;
-
-	default:
-		Console << U"[handleNetworkMessages] 未知のメッセージタイプ: " << (int)*msgType;
-		// 未知のメッセージは破棄
-		m_multiplayer->peekMessageType();  // これではキューから削除できない
-		break;
-	}
-	}  // while終了
-}
-
-void Game::sendGameStateSync()
-{
-	if (!m_multiplayer || !m_isOnlineMode)
-		return;
-
-	GameStateSyncMessage msg;
-	msg.type = MessageType::GameStateSync;
-
-	// 現在の状態をメッセージに格納（add_networkブランチと同じ構造）
-	if (m_isHost)
-	{
-		// ホストの場合：自分がhost、相手がclient
-		msg.hostHP = m_state.playerHP;
-		msg.hostCost = m_state.costValue;
-		msg.hostDefending = m_state.defending;
-		msg.hostDefendTime = m_state.defendTimer.sF();
-		msg.hostCrazy = m_state.playerCrazy;
-
-		msg.clientHP = m_state.enemyHP;
-		msg.clientCost = 0;  // 相手のコストは不要
-		msg.clientDefending = false;
-		msg.clientDefendTime = 0;
-		msg.clientCrazy = m_state.enemyCrazy;
-		
-		Console << U"[ホスト送信] playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
-	}
-	else
-	{
-		// クライアントの場合：自分がclient、相手がhost
-		msg.hostHP = m_state.enemyHP;
-		msg.hostCost = 0;
-		msg.hostDefending = false;
-		msg.hostDefendTime = 0;
-		msg.hostCrazy = m_state.enemyCrazy;
-
-		msg.clientHP = m_state.playerHP;
-		msg.clientCost = m_state.costValue;
-		msg.clientDefending = m_state.defending;
-		msg.clientDefendTime = m_state.defendTimer.sF();
-		msg.clientCrazy = m_state.playerCrazy;
-		
-		Console << U"[クライアント送信] playerHP=" << m_state.playerHP << U" enemyHP=" << m_state.enemyHP;
-	}
-
-	msg.isHostTurn = m_isHost ? m_isMyTurn : !m_isMyTurn;
-	msg.turnNumber = m_turnNumber;
-
-	m_multiplayer->send(msg);
-}
-
-void Game::sendPlayerAction(ActionType action)
-{
-	if (!m_multiplayer || !m_isOnlineMode)
-		return;
-	
-	PlayerActionMessage msg;
-	msg.type = MessageType::PlayerAction;
-	msg.action = action;
-	msg.turnNumber = m_turnNumber;
-	
-	m_multiplayer->send(msg);
+	ScreenFrame().draw(s3d::RectF{ 0, 0, static_cast<double>(Scene::Width()), static_cast<double>(Scene::Height()) });
 }

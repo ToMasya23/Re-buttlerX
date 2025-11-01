@@ -1,19 +1,19 @@
-﻿# pragma once
-# include "../Common.hpp"
-# include "../ui/PauseTheme.hpp"
-# include "../ui/PauseMenu.hpp"
-# include "../ui/BattleLayout.hpp"
-# include "../game/BattleState.hpp"
-# include "../game/FaceTextures.hpp"
-# include "../game/CardDeck.hpp"
-# include "../network/MultiplayerManager.hpp"
-# include "../network/BattleMessages.hpp"
+#pragma once
+#include <memory>
+#include <array>
+#include "../Common.hpp"
+#include "../ui/PauseTheme.hpp"
+#include "../ui/PauseMenu.hpp"
+#include "../ui/BattleLayout.hpp"
+#include "../game/BattleState.hpp"
+#include "../game/FaceTextures.hpp"
+#include "../game/CardDeck.hpp"
+#include "../network/MultiplayerManager.hpp"
+#include "../network/BattleMessages.hpp"
 
-// ゲームシーン（PvE / PvP バトル）
 class Game : public App::Scene
 {
 public:
-
 	Game(const InitData& init);
 
 	void update() override;
@@ -21,40 +21,94 @@ public:
 	void draw() const override;
 
 private:
-    // ---- バトル状態（PvE/PvP共通） ----
-    BattleState m_state;
-    FaceTextures m_faces;
-    CardDeck m_deck;
+	struct BattleInput
+	{
+		std::array<bool, 4> attack{};
+		bool defend = false;
+		bool escape = false;
+	};
 
-	// ---- キャラクタ表示用テクスチャ ----
+	class BattleLoop
+	{
+	public:
+		explicit BattleLoop(Game& game) : m_game(game) {}
+		virtual ~BattleLoop() = default;
+		virtual void onEnter() {}
+		virtual void update(const BattleInput& input) = 0;
+
+	protected:
+		Game& m_game;
+	};
+
+	class PvELoop;
+	class PvPHostLoop;
+	class PvPClientLoop;
+
+	friend class BattleLoop;
+	friend class PvELoop;
+	friend class PvPHostLoop;
+	friend class PvPClientLoop;
+
+	struct LogEntry
+	{
+		String message;
+		double timestamp = 0.0;
+	};
+
+	BattleState m_state;
+	FaceTextures m_faces;
+	CardDeck m_deck;
+	std::unique_ptr<BattleLoop> m_loop;
+
 	s3d::Texture m_texPlayer;
 	s3d::Texture m_texEnemy;
 
-	// ===== オンライン対戦用 =====
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
 	bool m_isOnlineMode = false;
 	bool m_isHost = false;
-	bool m_isMyTurn = false;
-	uint32 m_turnNumber = 0;
 
-	// ---- ポーズ用 ----
 	bool m_paused = false;
 	RenderTexture m_sceneRT;
 	RenderTexture m_blurInternal;
 	RenderTexture m_blurTarget;
 
-    PauseMenu m_pauseMenu;
-
-	// ボタンのホバー演出（必要なもののみ）
+	PauseMenu m_pauseMenu;
 	Transition m_escapeTr{ 0.3s, 0.15s };
 
-    // ユーティリティ
-    void finishBattleIfNeeded();
-    
-    // オンライン対戦用ヘルパー
-    void handleNetworkMessages();
-    void sendGameStateSync();
-    void sendPlayerAction(ActionType action);
+	s3d::Array<LogEntry> m_eventLog;
+	static constexpr double LogDisplayDuration = 4.0;
+	static constexpr size_t MaxLogEntries = 6;
+
+	double m_remoteCostValue = 100.0;
+	bool m_remoteDefending = false;
+	double m_remoteDefendEndTime = 0.0;
+
+	void setupBattleLoop();
+
+	BattleInput collectBattleInput();
+	void updateLogs();
+	void finishBattleIfNeeded();
+	void concludeBattle(net::BattleEndReason reason, bool hostWon);
+
+	void sendStateSync();
+	void applyStateSync(const net::StateSnapshotMessage& msg);
+	void broadcastEventToClient(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags);
+	void emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags);
+	String renderBattleEvent(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags, bool localPerspective) const;
+	void pushLog(const String& message);
+
+	void handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient);
+	void handleActionRejected(int reasonCode, net::BattleEventType eventType, bool broadcastToClient);
+	void handleDefend(net::BattleEventType eventType, bool broadcastToClient);
+	void handleEscape(net::BattleEventType eventType, bool broadcastToClient);
+	void handleEnemyAttack(int32 damage, net::BattleEventType eventType, bool broadcastToClient);
+	void updateRemoteCost(double deltaTime);
+	double remoteAvailableCost() const;
+	void consumeRemoteCost(double amount);
+	void startRemoteDefend();
+	void updateRemoteDefendState();
+
+	void replaceUsedCardIfNeeded();
+	void updatePausedUI();
+	void performPvEEnemyCounter();
 };
-
-

@@ -1,12 +1,6 @@
 #include "HostDiscovery.hpp"
+#include "NetworkPlatform.hpp"
 #include <thread>
-
-// Windows用のネットワークAPI
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-#endif
 
 HostDiscovery::HostDiscovery()
 {
@@ -136,52 +130,31 @@ void HostDiscovery::generateScanTargets()
 
 IPv4Address HostDiscovery::detectLocalIP()
 {
-#ifdef _WIN32
-	char hostname[256];
-	if (gethostname(hostname, sizeof(hostname)) == SOCKET_ERROR)
+	Array<IPv4Address> localIPs = NetworkPlatform::GetLocalIPAddresses();
+	for (const auto& ip : localIPs)
 	{
-		Console << U"[HostDiscovery] ホスト名の取得に失敗";
-		return IPv4Address{ 127, 0, 0, 1 };
-	}
-	
-	struct addrinfo hints = {};
-	hints.ai_family = AF_INET;  // IPv4
-	hints.ai_socktype = SOCK_STREAM;
-	
-	struct addrinfo* result = nullptr;
-	if (getaddrinfo(hostname, nullptr, &hints, &result) != 0)
-	{
-		Console << U"[HostDiscovery] アドレス情報の取得に失敗";
-		return IPv4Address{ 127, 0, 0, 1 };
-	}
-	
-	// 最初の非ループバックアドレスを使用
-	for (struct addrinfo* ptr = result; ptr != nullptr; ptr = ptr->ai_next)
-	{
-		if (ptr->ai_family == AF_INET)
+		if (ip == IPv4Address{ 127, 0, 0, 1 } || ip == IPv4Address{ 0, 0, 0, 0 })
 		{
-			struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)ptr->ai_addr;
-			uint32_t addr = ntohl(sockaddr_ipv4->sin_addr.s_addr);
-			
-			uint8 a = (addr >> 24) & 0xFF;
-			uint8 b = (addr >> 16) & 0xFF;
-			uint8 c = (addr >> 8) & 0xFF;
-			uint8 d = (addr >> 0) & 0xFF;
-			
-			// ループバックアドレス（127.x.x.x）をスキップ
-			if (a != 127)
-			{
-				freeaddrinfo(result);
-				Console << U"[HostDiscovery] ローカルIPを検出: " << (int)a << U"." << (int)b << U"." << (int)c << U"." << (int)d;
-				return IPv4Address{ a, b, c, d };
-			}
+			continue;
 		}
+
+		const auto& data = ip.getData();
+		Console << U"[HostDiscovery] Local IP detected: "
+			<< static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
+			<< U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
+		return ip;
 	}
-	
-	freeaddrinfo(result);
-#endif
-	
-	Console << U"[HostDiscovery] 有効なローカルIPが見つかりませんでした";
+
+	if (!localIPs.isEmpty())
+	{
+		const auto& data = localIPs.front().getData();
+		Console << U"[HostDiscovery] Only loopback/local IPs detected, using "
+			<< static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
+			<< U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
+		return localIPs.front();
+	}
+
+	Console << U"[HostDiscovery] No local IP address available; using loopback";
 	return IPv4Address{ 127, 0, 0, 1 };
 }
 
@@ -256,3 +229,4 @@ Optional<uint16> HostDiscovery::findAvailablePort(uint16 startPort, uint16 range
 	Console << U"[HostDiscovery] 利用可能なポートが見つかりませんでした";
 	return none;
 }
+

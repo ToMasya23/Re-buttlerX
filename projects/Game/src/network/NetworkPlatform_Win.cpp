@@ -5,6 +5,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
 
@@ -50,7 +51,7 @@ namespace NetworkPlatform
 
 	bool SetNonBlocking(SocketHandle socket, bool enable)
 	{
-		u_long mode = enable ? 1 : 0;
+		u_long mode = enable ? 1u : 0u;
 		int result = ioctlsocket(static_cast<SOCKET>(socket), FIONBIO, &mode);
 		if (result != 0)
 		{
@@ -121,20 +122,19 @@ namespace NetworkPlatform
 		sockaddr_in dest{};
 		dest.sin_family = AF_INET;
 		dest.sin_port = htons(port);
-		
-		// IPv4Addressの文字列表現から変換
+
 		std::string addrStr = address.str().narrow();
 		inet_pton(AF_INET, addrStr.c_str(), &dest.sin_addr);
 
 		int result = sendto(
 			static_cast<SOCKET>(socket),
-			static_cast<const char*>(data),
+			reinterpret_cast<const char*>(data),
 			static_cast<int>(size),
 			0,
 			reinterpret_cast<const sockaddr*>(&dest),
 			sizeof(dest)
 		);
-		
+
 		if (result == SOCKET_ERROR)
 		{
 			int error = WSAGetLastError();
@@ -144,7 +144,7 @@ namespace NetworkPlatform
 			}
 			return -1;
 		}
-		
+
 		return result;
 	}
 
@@ -155,7 +155,7 @@ namespace NetworkPlatform
 
 		int result = recvfrom(
 			static_cast<SOCKET>(socket),
-			static_cast<char*>(buffer),
+			reinterpret_cast<char*>(buffer),
 			static_cast<int>(bufferSize),
 			0,
 			reinterpret_cast<sockaddr*>(&sender),
@@ -216,12 +216,11 @@ namespace NetworkPlatform
 			&bufferSize
 		);
 
-		// バッファサイズが不足している場合は再試行
 		if (ret == ERROR_BUFFER_OVERFLOW)
 		{
 			buffer.resize(bufferSize);
 			adapterAddresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-			
+
 			ret = GetAdaptersAddresses(
 				AF_INET,
 				GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
@@ -240,7 +239,9 @@ namespace NetworkPlatform
 		for (PIP_ADAPTER_ADDRESSES adapter = adapterAddresses; adapter != nullptr; adapter = adapter->Next)
 		{
 			if (adapter->OperStatus != IfOperStatusUp)
+			{
 				continue;
+			}
 
 			for (PIP_ADAPTER_UNICAST_ADDRESS unicast = adapter->FirstUnicastAddress; unicast != nullptr; unicast = unicast->Next)
 			{
@@ -266,4 +267,4 @@ namespace NetworkPlatform
 	}
 }
 
-#endif  // _WIN32
+#endif // _WIN32

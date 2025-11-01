@@ -201,49 +201,60 @@ void Matching::update()
 		}
 		
 		// Enterキーでも確定
-		if ((confirmButton.leftClicked() || KeyEnter.down()) && !m_passphraseInputState.text.isEmpty())
+		if (confirmButton.leftClicked() || KeyEnter.down())
 		{
-			m_passphrase = m_passphraseInputState.text;
-			
-			if (m_isHost)
+			String normalized = m_passphraseInputState.text;
+			while (!normalized.isEmpty() && (normalized.back() <= U' '))
 			{
-				// ホスト: 合言葉で部屋を立てる
-				Console << U"[ホスト] 合言葉設定: " << m_passphrase;
-				
-				// ローカルIPアドレスを取得
-				IPv4Address localIP = detectLocalIPForDisplay();
-				m_displayIP = localIP.str();
-				
-				// TCPサーバー開始
-				m_multiplayer->startHost(m_gamePort);
-				
-				// UDP広告開始
-				if (m_udpDiscovery->startAdvertising(m_passphrase, U"Re-ButtlerX", m_gamePort))
-				{
-					m_viewMode = ViewMode::Waiting;
-					Console << U"[ホスト] 接続待機中... IP: " << m_displayIP;
-				}
-				else
-				{
-					Console << U"[エラー] UDP広告の開始に失敗";
-					m_multiplayer->disconnect();
-					m_viewMode = ViewMode::Menu;
-				}
+				normalized.pop_back();
 			}
-			else
+
+			if (!normalized.isEmpty())
 			{
-				// クライアント: 合言葉でブロードキャスト開始
-				Console << U"[クライアント] 合言葉入力: " << m_passphrase;
+				m_passphraseInputState.text = normalized;
+				m_passphraseInputState.cursorPos = normalized.size();
+				m_passphrase = normalized;
 				
-				if (m_udpDiscovery->startSearching(m_passphrase))
+				if (m_isHost)
 				{
-					Console << U"[クライアント] ホスト検索中...";
-					// ViewModeはPassphraseInputのまま（自動接続処理が行われる）
+					// ホスト: 合言葉で部屋を立てる
+					Console << U"[ホスト] 合言葉設定: " << m_passphrase;
+					
+					// ローカルIPアドレスを取得
+					IPv4Address localIP = detectLocalIPForDisplay();
+					m_displayIP = localIP.str();
+					
+					// TCPサーバー開始
+					m_multiplayer->startHost(m_gamePort);
+					
+					// UDP広告開始
+					if (m_udpDiscovery->startAdvertising(m_passphrase, U"Re-ButtlerX", m_gamePort))
+					{
+						m_viewMode = ViewMode::Waiting;
+						Console << U"[ホスト] 接続待機中... IP: " << m_displayIP;
+					}
+					else
+					{
+						Console << U"[エラー] UDP広告の開始に失敗";
+						m_multiplayer->disconnect();
+						m_viewMode = ViewMode::Menu;
+					}
 				}
 				else
 				{
-					Console << U"[エラー] UDP検索の開始に失敗";
-					m_viewMode = ViewMode::Menu;
+					// クライアント: 合言葉でブロードキャスト開始
+					Console << U"[クライアント] 合言葉入力: " << m_passphrase;
+					
+					if (m_udpDiscovery->startSearching(m_passphrase))
+					{
+						Console << U"[クライアント] ホスト検索中...";
+						// ViewModeはPassphraseInputのまま（自動接続処理が行われる）
+					}
+					else
+					{
+						Console << U"[エラー] UDP検索の開始に失敗";
+						m_viewMode = ViewMode::Menu;
+					}
 				}
 			}
 		}

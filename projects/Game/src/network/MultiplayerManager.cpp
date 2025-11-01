@@ -1,591 +1,506 @@
-# include "MultiplayerManager.hpp"
+#include "MultiplayerManager.hpp"
+#include <limits>
+#include <utility>
+
+namespace
+{
+	uint32 GenerateNonce()
+	{
+		return s3d::Random(static_cast<uint32>(1), std::numeric_limits<uint32>::max());
+	}
+
+	net::PacketType ToPacketType(uint16 raw)
+	{
+		return static_cast<net::PacketType>(raw);
+	}
+}
 
 MultiplayerManager::MultiplayerManager()
 {
+	resetState();
 }
 
 bool MultiplayerManager::startHost(uint16 port)
 {
-	Console << U"[MultiplayerManager] ポート" << port << U"で接続待機開始";
-	m_server.startAccept(port);
+	Console << U"[MultiplayerManager] Starting host on port " << port;
+
+	m_client.disconnect();
+	m_server.cancelAccept();
+	resetState();
+
 	m_role = Role::Host;
-	Console << U"[ホスト] 接続待機中...";
-	Console << U"[ホスト] 自分のIPアドレスを相手に伝えてください";
-	Console << U"[ホスト] コマンドプロンプトで 'ipconfig' を実行して確認できます";
-	
+	m_server.startAccept(port);
+
+	Console << U"[Host] Waiting for client connection. Share your IP address with your opponent.";
 	return true;
 }
 
 bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port, double timeoutSeconds)
 {
-	Console << U"[MultiplayerManager] 接続試行 " << address.str() << U":" << port << U" (timeout=" << timeoutSeconds << U"s)";
-	
-	if (m_client.connect(address, port))
+	Console << U"[MultiplayerManager] Connecting to " << address.str() << U":" << port;
+
+	m_client.disconnect();
+	m_server.cancelAccept();
+	resetState();
+
+	if (!m_client.connect(address, port))
 	{
-		m_role = Role::Client;
-		Console << U"[MultiplayerManager] TCPClient.connect()成功 - 接続確立を待機中...";
-		
-		// 接続が実際に確立するまで少し待つ
-		for (int i = 0; i < 10; ++i)
-		{
-			System::Sleep(50ms);
-			
-			if (m_client.isConnected())
-			{
-				Console << U"[MultiplayerManager] isConnected()=true 接続が確立されました！（" << (i + 1) * 50 << U"ms後）";
-				m_clientConnectSucceeded = true;
-				return true;
-			}
-			
-			Console << U"[MultiplayerManager] 待機中... " << (i + 1) * 50 << U"ms";
-		}
-		
-		Console << U"[MultiplayerManager] 警告: connect()は成功したが500ms待ってもisConnected()=false";
-		Console << U"[MultiplayerManager] available=" << m_client.available() << U" bytes";
-		Console << U"[MultiplayerManager] Siv3Dのバグ回避：connect()成功を信頼して接続済みとします";
-		m_clientConnectSucceeded = true;  // connect()が成功したので接続済みとみなす
-		return true;
+		Console << U"[MultiplayerManager] connect() failed";
+		m_role = Role::None;
+		return false;
 	}
-	
-	Console << U"[MultiplayerManager] 接続失敗";
-	return false;
+
+	m_role = Role::Client;
+	m_connectionState = ConnectionState::Handshaking;
+
+	double timeout = Max(0.0, timeoutSeconds);
+	const double startTime = Scene::Time();
+	bool connected = m_client.isConnected();
+
+	while (!connected && (Scene::Time() - startTime) <= timeout)
+	{
+		System::Sleep(50ms);
+		connected = m_client.isConnected();
+	}
+
+	const double now = Scene::Time();
+	m_clientConnectSucceeded = connected;
+	m_connectionTimestamp = now;
+	m_lastHeartbeatTime = now;
+	m_lastSentHeartbeatTime = now;
+
+	sendHandshake();
+	return true;
 }
 
 void MultiplayerManager::disconnect()
 {
 	m_client.disconnect();
 	m_server.cancelAccept();
-	m_sessionID.reset();
+	resetState();
 	m_role = Role::None;
-	m_receiveQueue.clear();
 }
 
 bool MultiplayerManager::isConnected() const
 {
-	if (m_role == Role::Host)
+	return (m_connectionState == ConnectionState::Connected);
+}
+
+bool MultiplayerManager::isConnectionAlive() const
+{
+	if (!isConnected())
 	{
-		return m_sessionID.has_value() && m_server.hasSession(*m_sessionID);
+		return false;
 	}
-	else
-	{
-		// Siv3D 0.6.16のバグ回避：connect()が成功したら接続済みとみなす
-		return m_clientConnectSucceeded || m_client.isConnected();
-	}
+
+	const double elapsed = Scene::Time() - m_lastHeartbeatTime;
+	return (elapsed <= CONNECTION_TIMEOUT);
 }
 
 void MultiplayerManager::update()
 {
-	// ホストの場合、接続待ち受け
-	if (m_role == Role::Host && !m_sessionID)
+	if (m_role == Role::Host)
 	{
-		bool hasSession = m_server.hasSession();
-		
-		// デバッグ：セッション状態を確認
-		static double lastDebugTime = 0;
-		if (Scene::Time() - lastDebugTime > 2.0)
+		if (!m_sessionID)
 		{
-			Console << U"[MultiplayerManager::update] ホスト：hasSession=" << hasSession;
-			lastDebugTime = Scene::Time();
-		}
-		
-		if (hasSession)
-		{
-			auto sessions = m_server.getSessionIDs();
-			Console << U"[MultiplayerManager] セッション数: " << sessions.size();
-			
-			if (!sessions.isEmpty())
+			if (m_server.hasSession())
 			{
-				m_sessionID = sessions.front();
-				Console << U"[MultiplayerManager] クライアントからの接続を受け入れました！";
+				auto sessions = m_server.getSessionIDs();
+				if (!sessions.isEmpty())
+				{
+					resetState();
+					m_sessionID = sessions.front();
+					m_connectionState = ConnectionState::Handshaking;
+					m_connectionTimestamp = Scene::Time();
+					m_lastHeartbeatTime = m_connectionTimestamp;
+					m_lastSentHeartbeatTime = m_connectionTimestamp;
+					Console << U"[Host] Client session accepted";
+					sendHandshake();
+				}
 			}
+		}
+		else if (m_connectionState == ConnectionState::Handshaking && !m_localHandshakeSent)
+		{
+			sendHandshake();
+		}
+	}
+	else if (m_role == Role::Client)
+	{
+		if (m_connectionState == ConnectionState::Handshaking && !m_localHandshakeSent)
+		{
+			sendHandshake();
 		}
 	}
 
 	processIncomingData();
+	checkConnectionHealth();
 }
 
 void MultiplayerManager::processIncomingData()
 {
-	if (!isConnected())
-		return;
+	auto readPackets = [&](auto availableFn, auto lookaheadFn, auto readFn)
+	{
+		net::PacketHeader header;
 
-	uint32 size = 0;
+		while (availableFn() >= static_cast<int64>(sizeof(net::PacketHeader)))
+		{
+			if (!lookaheadFn(header))
+			{
+				break;
+			}
+
+			if (header.magic != net::PacketMagic)
+			{
+				Console << U"[MultiplayerManager] Invalid packet magic";
+				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
+				readFn(junk.data(), junk.size());
+				continue;
+			}
+
+			if (header.version != net::ProtocolVersion)
+			{
+				Console << U"[MultiplayerManager] Protocol version mismatch";
+				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
+				readFn(junk.data(), junk.size());
+				disconnect();
+				return;
+			}
+
+			if (header.payloadSize > net::MaxPayloadSize)
+			{
+				Console << U"[MultiplayerManager] Payload too large: " << header.payloadSize;
+				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
+				readFn(junk.data(), junk.size());
+				continue;
+			}
+
+			size_t totalSize = sizeof(net::PacketHeader) + header.payloadSize;
+			if (availableFn() < static_cast<int64>(totalSize))
+			{
+				break;
+			}
+
+			if (!readFn(&header, sizeof(header)))
+			{
+				break;
+			}
+
+			s3d::Array<uint8> payload(header.payloadSize);
+			if (header.payloadSize > 0)
+			{
+				if (!readFn(payload.data(), header.payloadSize))
+				{
+					break;
+				}
+
+				uint32 checksum = net::ComputeChecksum(payload.data(), header.payloadSize);
+				if (checksum != header.checksum)
+				{
+					Console << U"[MultiplayerManager] Packet checksum mismatch";
+					continue;
+				}
+			}
+
+			m_lastHeartbeatTime = Scene::Time();
+
+			net::PacketType type = ToPacketType(header.type);
+			if (type == net::PacketType::Heartbeat)
+			{
+				continue;
+			}
+
+			if (type == net::PacketType::Handshake)
+			{
+				handleHandshakePacket(header, payload);
+				continue;
+			}
+
+			if (header.sequence != 0 && header.sequence <= m_lastReceivedSequence)
+			{
+				Console << U"[MultiplayerManager] Dropping out-of-order packet seq=" << header.sequence;
+				continue;
+			}
+
+			m_lastReceivedSequence = Max(m_lastReceivedSequence, header.sequence);
+
+			if (m_connectionState != ConnectionState::Connected)
+			{
+				Console << U"[MultiplayerManager] Buffering skipped until handshake completes";
+				continue;
+			}
+
+			enqueuePacket(header, std::move(payload));
+		}
+	};
 
 	if (m_role == Role::Host)
 	{
-		while (m_server.available(m_sessionID) >= sizeof(size))
+		if (!m_sessionID)
 		{
-			if (!m_server.lookahead(size, m_sessionID))
-				break;
+			return;
+		}
 
-			if (size == 0 || size > 1024 * 1024)
-				break;
+		auto availableFn = [&]() -> int64
+		{
+			return m_server.available(m_sessionID);
+		};
 
-			if (m_server.available(m_sessionID) < sizeof(size) + size)
-				break;
+		auto lookaheadFn = [&](net::PacketHeader& header) -> bool
+		{
+			return m_server.lookahead(header, m_sessionID);
+		};
 
-			if (!m_server.read(&size, sizeof(size), m_sessionID))
-				break;
+		auto readFn = [&](void* dst, size_t size) -> bool
+		{
+			return m_server.read(dst, size, m_sessionID);
+		};
 
-			s3d::Blob blob(size);
-			if (m_server.read(blob.data(), size, m_sessionID) && blob.size() == size)
-			{
-				m_receiveQueue.push_back(blob);
-			}
-			else
-			{
-				break;
-			}
+		readPackets(availableFn, lookaheadFn, readFn);
+	}
+	else if (m_role == Role::Client)
+	{
+		auto availableFn = [&]() -> int64
+		{
+			return m_client.available();
+		};
+
+		auto lookaheadFn = [&](net::PacketHeader& header) -> bool
+		{
+			return m_client.lookahead(header);
+		};
+
+		auto readFn = [&](void* dst, size_t size) -> bool
+		{
+			return m_client.read(dst, size);
+		};
+
+		readPackets(availableFn, lookaheadFn, readFn);
+	}
+}
+
+void MultiplayerManager::handleHandshakePacket(const net::PacketHeader& header, const s3d::Array<uint8>& payload)
+{
+	if (payload.size() != sizeof(net::HandshakeMessage))
+	{
+		Console << U"[MultiplayerManager] Invalid handshake payload";
+		disconnect();
+		return;
+	}
+
+	net::HandshakeMessage handshake{};
+	std::memcpy(&handshake, payload.data(), sizeof(handshake));
+
+	m_remoteNonce = handshake.nonce;
+	m_remoteHandshakeReceived = true;
+
+	if (m_role == Role::Host && handshake.role != net::ConnectionRole::Client)
+	{
+		Console << U"[Host] Unexpected handshake role";
+		return;
+	}
+
+	if (m_role == Role::Client && handshake.role != net::ConnectionRole::Host)
+	{
+		Console << U"[Client] Unexpected handshake role";
+		return;
+	}
+
+	if (!m_localHandshakeSent)
+	{
+		sendHandshake();
+	}
+
+	if (m_connectionState != ConnectionState::Connected)
+	{
+		m_connectionState = ConnectionState::Connected;
+		m_clientConnectSucceeded = true;
+		m_connectionTimestamp = Scene::Time();
+		m_lastHeartbeatTime = m_connectionTimestamp;
+		m_lastSentHeartbeatTime = m_connectionTimestamp;
+		Console << U"[MultiplayerManager] Handshake complete";
+	}
+}
+
+void MultiplayerManager::enqueuePacket(const net::PacketHeader& header, s3d::Array<uint8>&& payload)
+{
+	if (m_receiveQueue.size() >= MaxReceiveQueue)
+	{
+		m_receiveQueue.pop_front();
+	}
+
+	m_receiveQueue.push_back(QueuedPacket{ header, std::move(payload) });
+}
+
+void MultiplayerManager::checkConnectionHealth()
+{
+	const double now = Scene::Time();
+
+	if (m_role == Role::Host)
+	{
+		if (m_sessionID && !m_server.hasSession(*m_sessionID))
+		{
+			Console << U"[MultiplayerManager] Host session closed";
+			resetState();
+			return;
 		}
 	}
-	else
+	else if (m_role == Role::Client)
 	{
-		while (m_client.available() >= sizeof(size))
+		if (!m_client.isConnected())
 		{
-			if (!m_client.lookahead(size))
-				break;
-
-			if (size == 0 || size > 1024 * 1024)
-				break;
-
-			if (m_client.available() < sizeof(size) + size)
-				break;
-
-			if (!m_client.read(&size, sizeof(size)))
-				break;
-
-			s3d::Blob blob(size);
-			if (m_client.read(blob.data(), size) && blob.size() == size)
+			if (m_clientConnectSucceeded)
 			{
-				m_receiveQueue.push_back(blob);
+				Console << U"[MultiplayerManager] Client connection lost";
 			}
-			else
-			{
-				break;
-			}
+			m_clientConnectSucceeded = false;
 		}
 	}
-}
 
-s3d::Optional<MessageType> MultiplayerManager::peekMessageType()
-{
-	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	const auto& blob = m_receiveQueue.front();
-
-	if (blob.isEmpty() || blob.size() < 1)
-		return s3d::none;
-
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-	MessageType type = static_cast<MessageType>(data[0]);
-
-	return type;
-}
-
-// PlayerActionMessage specialization
-template<>
-void MultiplayerManager::send<PlayerActionMessage>(const PlayerActionMessage& message)
-{
-	if (!isConnected())
+	if (m_connectionState == ConnectionState::Disconnected)
+	{
 		return;
+	}
 
-	Console << U"[MultiplayerManager::send] damage=" << message.damage;
+	if ((now - m_lastHeartbeatTime) > CONNECTION_TIMEOUT)
+	{
+		Console << U"[MultiplayerManager] Connection timeout";
+		disconnect();
+		return;
+	}
 
-	s3d::Array<uint8> data;
-	data.push_back(static_cast<uint8>(message.type));
-	data.push_back(static_cast<uint8>(message.action));
+	if ((now - m_lastSentHeartbeatTime) >= HEARTBEAT_INTERVAL)
+	{
+		sendHeartbeat();
+		m_lastSentHeartbeatTime = now;
+	}
+}
 
-	// damageフィールドを追加（int32 = 4 bytes）
-	int32 damage = message.damage;
-	data.push_back((damage >> 0) & 0xFF);
-	data.push_back((damage >> 8) & 0xFF);
-	data.push_back((damage >> 16) & 0xFF);
-	data.push_back((damage >> 24) & 0xFF);
+void MultiplayerManager::sendHeartbeat()
+{
+	if (m_connectionState == ConnectionState::Disconnected)
+	{
+		return;
+	}
 
-	uint32 turnNum = message.turnNumber;
-	data.push_back((turnNum >> 0) & 0xFF);
-	data.push_back((turnNum >> 8) & 0xFF);
-	data.push_back((turnNum >> 16) & 0xFF);
-	data.push_back((turnNum >> 24) & 0xFF);
+	sendPacket(net::PacketType::Heartbeat, nullptr, 0, true);
+}
 
-	const uint32 size = static_cast<uint32>(data.size());
+void MultiplayerManager::sendHandshake()
+{
+	if (m_connectionState == ConnectionState::Disconnected)
+	{
+		return;
+	}
 
-	Console << U"[MultiplayerManager::send] データサイズ=" << size << U" bytes";
+	if (m_localHandshakeSent)
+	{
+		return;
+	}
+
+	if (m_localNonce == 0)
+	{
+		m_localNonce = GenerateNonce();
+	}
+
+	net::HandshakeMessage handshake{};
+	handshake.nonce = m_localNonce;
+	handshake.role = (m_role == Role::Host) ? net::ConnectionRole::Host : net::ConnectionRole::Client;
+
+	if (sendPacket(net::PacketType::Handshake, &handshake, static_cast<uint32>(sizeof(handshake)), true))
+	{
+		m_localHandshakeSent = true;
+		Console << U"[MultiplayerManager] Handshake sent";
+	}
+}
+
+bool MultiplayerManager::sendPacket(net::PacketType type, const void* payload, uint32 payloadSize, bool allowDuringHandshake)
+{
+	if (!allowDuringHandshake && m_connectionState != ConnectionState::Connected)
+	{
+		return false;
+	}
+
+	if (payloadSize > net::MaxPayloadSize)
+	{
+		Console << U"[MultiplayerManager] Payload exceeds maximum size";
+		return false;
+	}
+
+	net::PacketHeader header;
+	header.type = static_cast<uint16>(type);
+	header.payloadSize = payloadSize;
+	header.sequence = (type == net::PacketType::Heartbeat || type == net::PacketType::Handshake) ? 0 : m_nextSendSequence++;
+	header.checksum = (payload && payloadSize > 0) ? net::ComputeChecksum(payload, payloadSize) : 0;
+
+	bool success = false;
 
 	if (m_role == Role::Host)
 	{
-		m_server.send(&size, sizeof(size), m_sessionID);
-		m_server.send(data.data(), data.size(), m_sessionID);
+		if (!m_sessionID)
+		{
+			return false;
+		}
+
+		success = m_server.send(&header, sizeof(header), m_sessionID);
+		if (success && payloadSize > 0)
+		{
+			success = m_server.send(payload, payloadSize, m_sessionID);
+		}
 	}
-	else
+	else if (m_role == Role::Client)
 	{
-		m_client.send(&size, sizeof(size));
-		m_client.send(data.data(), data.size());
+		success = m_client.send(&header, sizeof(header));
+		if (success && payloadSize > 0)
+		{
+			success = m_client.send(payload, payloadSize);
+		}
 	}
+
+	if (!success)
+	{
+		Console << U"[MultiplayerManager] Failed to send packet";
+		return false;
+	}
+
+	if (type == net::PacketType::Heartbeat)
+	{
+		m_lastSentHeartbeatTime = Scene::Time();
+	}
+
+	return true;
 }
 
-template<>
-s3d::Optional<PlayerActionMessage> MultiplayerManager::receive<PlayerActionMessage>()
+net::PacketType MultiplayerManager::peekPacketType() const
 {
 	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	auto blob = m_receiveQueue.front();
-	m_receiveQueue.pop_front();
-
-	Console << U"[MultiplayerManager::receive] blobサイズ=" << blob.size();
-
-	if (blob.size() < 10)  // type(1) + action(1) + damage(4) + turnNumber(4) = 10 bytes
 	{
-		Console << U"[MultiplayerManager::receive] エラー: サイズ不足";
-		return s3d::none;
+		return net::PacketType::Heartbeat;
 	}
 
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-
-	PlayerActionMessage message;
-	message.type = static_cast<MessageType>(data[0]);
-	message.action = static_cast<ActionType>(data[1]);
-	
-	// damageフィールドを読み取り
-	message.damage = (static_cast<int32>(data[2]) << 0) |
-		(static_cast<int32>(data[3]) << 8) |
-		(static_cast<int32>(data[4]) << 16) |
-		(static_cast<int32>(data[5]) << 24);
-	
-	message.turnNumber = (static_cast<uint32>(data[6]) << 0) |
-		(static_cast<uint32>(data[7]) << 8) |
-		(static_cast<uint32>(data[8]) << 16) |
-		(static_cast<uint32>(data[9]) << 24);
-
-	Console << U"[MultiplayerManager::receive] damage=" << message.damage 
-			<< U" action=" << (int)message.action
-			<< U" bytes: [" << (int)data[2] << U"," << (int)data[3] << U"," << (int)data[4] << U"," << (int)data[5] << U"]";
-
-	return message;
+	return ToPacketType(m_receiveQueue.front().header.type);
 }
 
-// GameStateSyncMessage specialization
-template<>
-void MultiplayerManager::send<GameStateSyncMessage>(const GameStateSyncMessage& message)
+void MultiplayerManager::discardFrontPacket()
 {
-	if (!isConnected())
-		return;
-
-	Console << U"[MultiplayerManager::send<GameStateSync>] type=" << (int)message.type 
-			<< U" hostHP=" << message.hostHP << U" clientHP=" << message.clientHP;
-
-	s3d::Array<uint8> data;
-	data.push_back(static_cast<uint8>(message.type));
-
-	auto writeInt32 = [&](int32 val) {
-		data.push_back((val >> 0) & 0xFF);
-		data.push_back((val >> 8) & 0xFF);
-		data.push_back((val >> 16) & 0xFF);
-		data.push_back((val >> 24) & 0xFF);
-	};
-
-	auto writeDouble = [&](double val) {
-		uint64 bits;
-		std::memcpy(&bits, &val, sizeof(double));
-		for (int i = 0; i < 8; ++i)
-			data.push_back((bits >> (i * 8)) & 0xFF);
-	};
-
-	auto writeBool = [&](bool val) {
-		data.push_back(val ? 1 : 0);
-	};
-
-	writeInt32(message.hostHP);
-	writeDouble(message.hostCost);
-	writeBool(message.hostDefending);
-	writeDouble(message.hostDefendTime);
-	writeInt32(message.hostCrazy);
-
-	writeInt32(message.clientHP);
-	writeDouble(message.clientCost);
-	writeBool(message.clientDefending);
-	writeDouble(message.clientDefendTime);
-	writeInt32(message.clientCrazy);
-
-	writeBool(message.isHostTurn);
-
-	uint32 turnNum = message.turnNumber;
-	data.push_back((turnNum >> 0) & 0xFF);
-	data.push_back((turnNum >> 8) & 0xFF);
-	data.push_back((turnNum >> 16) & 0xFF);
-	data.push_back((turnNum >> 24) & 0xFF);
-
-	const uint32 size = static_cast<uint32>(data.size());
-	
-	Console << U"[MultiplayerManager::send<GameStateSync>] データサイズ=" << size << U" bytes";
-	
-	if (m_role == Role::Host)
+	if (!m_receiveQueue.isEmpty())
 	{
-		m_server.send(&size, sizeof(size), m_sessionID);
-		m_server.send(data.data(), data.size(), m_sessionID);
-	}
-	else
-	{
-		m_client.send(&size, sizeof(size));
-		m_client.send(data.data(), data.size());
+		m_receiveQueue.pop_front();
 	}
 }
 
-template<>
-s3d::Optional<GameStateSyncMessage> MultiplayerManager::receive<GameStateSyncMessage>()
+void MultiplayerManager::resetState()
 {
-	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	auto blob = m_receiveQueue.front();
-	m_receiveQueue.pop_front();
-
-	Console << U"[MultiplayerManager::receive<GameStateSync>] blobサイズ=" << blob.size();
-
-	// 正しいサイズ: type(1) + host(4+8+1+8+4=25) + client(4+8+1+8+4=25) + isHostTurn(1) + turnNumber(4) = 56
-	if (blob.size() < 56)
-	{
-		Console << U"[MultiplayerManager::receive<GameStateSync>] エラー: サイズ不足 (必要:56)";
-		return s3d::none;
-	}
-
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-	size_t offset = 0;
-
-	GameStateSyncMessage message;
-	message.type = static_cast<MessageType>(data[offset++]);
-
-	auto readInt32 = [&]() -> int32 {
-		int32 val = (static_cast<int32>(data[offset + 0]) << 0) |
-			(static_cast<int32>(data[offset + 1]) << 8) |
-			(static_cast<int32>(data[offset + 2]) << 16) |
-			(static_cast<int32>(data[offset + 3]) << 24);
-		offset += 4;
-		return val;
-	};
-
-	auto readDouble = [&]() -> double {
-		uint64 bits = 0;
-		for (int i = 0; i < 8; ++i)
-			bits |= (static_cast<uint64>(data[offset + i]) << (i * 8));
-		offset += 8;
-		double val;
-		std::memcpy(&val, &bits, sizeof(double));
-		return val;
-	};
-
-	auto readBool = [&]() -> bool {
-		return data[offset++] != 0;
-	};
-
-	message.hostHP = readInt32();
-	message.hostCost = readDouble();
-	message.hostDefending = readBool();
-	message.hostDefendTime = readDouble();
-	message.hostCrazy = readInt32();
-
-	message.clientHP = readInt32();
-	message.clientCost = readDouble();
-	message.clientDefending = readBool();
-	message.clientDefendTime = readDouble();
-	message.clientCrazy = readInt32();
-
-	message.isHostTurn = readBool();
-	message.turnNumber = (static_cast<uint32>(data[offset + 0]) << 0) |
-		(static_cast<uint32>(data[offset + 1]) << 8) |
-		(static_cast<uint32>(data[offset + 2]) << 16) |
-		(static_cast<uint32>(data[offset + 3]) << 24);
-
-	Console << U"[MultiplayerManager::receive<GameStateSync>] hostHP=" << message.hostHP 
-			<< U" clientHP=" << message.clientHP;
-
-	return message;
-}
-
-// TurnChangeMessage specialization
-template<>
-void MultiplayerManager::send<TurnChangeMessage>(const TurnChangeMessage& message)
-{
-	if (!isConnected())
-		return;
-
-	s3d::Array<uint8> data;
-	data.push_back(static_cast<uint8>(message.type));
-	data.push_back(message.isHostTurn ? 1 : 0);
-
-	uint32 turnNum = message.turnNumber;
-	data.push_back((turnNum >> 0) & 0xFF);
-	data.push_back((turnNum >> 8) & 0xFF);
-	data.push_back((turnNum >> 16) & 0xFF);
-	data.push_back((turnNum >> 24) & 0xFF);
-
-	const uint32 size = static_cast<uint32>(data.size());
-	if (m_role == Role::Host)
-	{
-		m_server.send(&size, sizeof(size), m_sessionID);
-		m_server.send(data.data(), data.size(), m_sessionID);
-	}
-	else
-	{
-		m_client.send(&size, sizeof(size));
-		m_client.send(data.data(), data.size());
-	}
-}
-
-template<>
-s3d::Optional<TurnChangeMessage> MultiplayerManager::receive<TurnChangeMessage>()
-{
-	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	auto blob = m_receiveQueue.front();
-	m_receiveQueue.pop_front();
-
-	if (blob.size() < 6)
-		return s3d::none;
-
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-
-	TurnChangeMessage message;
-	message.type = static_cast<MessageType>(data[0]);
-	message.isHostTurn = (data[1] != 0);
-	message.turnNumber = (static_cast<uint32>(data[2]) << 0) |
-		(static_cast<uint32>(data[3]) << 8) |
-		(static_cast<uint32>(data[4]) << 16) |
-		(static_cast<uint32>(data[5]) << 24);
-
-	return message;
-}
-
-// BattleTextMessage specialization
-template<>
-void MultiplayerManager::send<BattleTextMessage>(const BattleTextMessage& message)
-{
-	if (!isConnected())
-		return;
-
-	s3d::Array<uint8> data;
-	data.push_back(static_cast<uint8>(message.type));
-
-	std::string utf8 = message.message.toUTF8();
-	uint32 strLen = static_cast<uint32>(utf8.size());
-	data.push_back((strLen >> 0) & 0xFF);
-	data.push_back((strLen >> 8) & 0xFF);
-	data.push_back((strLen >> 16) & 0xFF);
-	data.push_back((strLen >> 24) & 0xFF);
-
-	for (char c : utf8)
-		data.push_back(static_cast<uint8>(c));
-
-	const uint32 size = static_cast<uint32>(data.size());
-	if (m_role == Role::Host)
-	{
-		m_server.send(&size, sizeof(size), m_sessionID);
-		m_server.send(data.data(), data.size(), m_sessionID);
-	}
-	else
-	{
-		m_client.send(&size, sizeof(size));
-		m_client.send(data.data(), data.size());
-	}
-}
-
-template<>
-s3d::Optional<BattleTextMessage> MultiplayerManager::receive<BattleTextMessage>()
-{
-	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	auto blob = m_receiveQueue.front();
-	m_receiveQueue.pop_front();
-
-	if (blob.size() < 5)
-		return s3d::none;
-
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-
-	BattleTextMessage message;
-	message.type = static_cast<MessageType>(data[0]);
-
-	uint32 strLen = (static_cast<uint32>(data[1]) << 0) |
-		(static_cast<uint32>(data[2]) << 8) |
-		(static_cast<uint32>(data[3]) << 16) |
-		(static_cast<uint32>(data[4]) << 24);
-
-	if (blob.size() < 5 + strLen)
-		return s3d::none;
-
-	std::string utf8(reinterpret_cast<const char*>(data + 5), strLen);
-	message.message = Unicode::FromUTF8(utf8);
-
-	return message;
-}
-
-// BattleEndMessage specialization
-template<>
-void MultiplayerManager::send<BattleEndMessage>(const BattleEndMessage& message)
-{
-	if (!isConnected())
-		return;
-
-	s3d::Array<uint8> data;
-	data.push_back(static_cast<uint8>(message.type));
-	data.push_back(message.hostWon ? 1 : 0);
-
-	auto writeInt32 = [&](int32 val) {
-		data.push_back((val >> 0) & 0xFF);
-		data.push_back((val >> 8) & 0xFF);
-		data.push_back((val >> 16) & 0xFF);
-		data.push_back((val >> 24) & 0xFF);
-	};
-
-	writeInt32(message.hostFinalHP);
-	writeInt32(message.clientFinalHP);
-	data.push_back(message.endReason);
-
-	const uint32 size = static_cast<uint32>(data.size());
-	if (m_role == Role::Host)
-	{
-		m_server.send(&size, sizeof(size), m_sessionID);
-		m_server.send(data.data(), data.size(), m_sessionID);
-	}
-	else
-	{
-		m_client.send(&size, sizeof(size));
-		m_client.send(data.data(), data.size());
-	}
-}
-
-template<>
-s3d::Optional<BattleEndMessage> MultiplayerManager::receive<BattleEndMessage>()
-{
-	if (m_receiveQueue.isEmpty())
-		return s3d::none;
-
-	auto blob = m_receiveQueue.front();
-	m_receiveQueue.pop_front();
-
-	if (blob.size() < 11)
-		return s3d::none;
-
-	const uint8* data = reinterpret_cast<const uint8*>(blob.data());
-
-	BattleEndMessage message;
-	message.type = static_cast<MessageType>(data[0]);
-	message.hostWon = (data[1] != 0);
-
-	auto readInt32 = [&](size_t offset) -> int32 {
-		return (static_cast<int32>(data[offset + 0]) << 0) |
-			(static_cast<int32>(data[offset + 1]) << 8) |
-			(static_cast<int32>(data[offset + 2]) << 16) |
-			(static_cast<int32>(data[offset + 3]) << 24);
-	};
-
-	message.hostFinalHP = readInt32(2);
-	message.clientFinalHP = readInt32(6);
-	message.endReason = data[10];
-
-	return message;
+	m_sessionID.reset();
+	m_receiveQueue.clear();
+	m_connectionState = ConnectionState::Disconnected;
+	m_clientConnectSucceeded = false;
+	m_connectionTimestamp = 0.0;
+	m_lastHeartbeatTime = 0.0;
+	m_lastSentHeartbeatTime = 0.0;
+	m_nextSendSequence = 1;
+	m_lastReceivedSequence = 0;
+	m_localNonce = 0;
+	m_remoteNonce = 0;
+	m_localHandshakeSent = false;
+	m_remoteHandshakeReceived = false;
 }
