@@ -135,6 +135,68 @@ namespace BattleLogic
             return Clamp(s.enemyCastTimer.sF() / s.enemyCastDuration, 0.0, 1.0);
         }
     }
+    
+    // ===== クレイジーモードシステム =====
+    
+    // クレイジーモード発動チェック
+    inline bool shouldEnterCrazyMode(const BattleState& s, bool isPlayer)
+    {
+        if (isPlayer)
+        {
+            return !s.playerCrazyMode && (s.playerCrazy >= 100);
+        }
+        else
+        {
+            return !s.enemyCrazyMode && (s.enemyCrazy >= 100);
+        }
+    }
+    
+    // クレイジーモード開始
+    inline void startCrazyMode(BattleState& s, bool isPlayer, double currentTime)
+    {
+        if (isPlayer)
+        {
+            s.playerCrazyMode = true;
+            s.playerCrazy = 0;
+            s.playerCrazyModeStartTime = currentTime;
+        }
+        else
+        {
+            s.enemyCrazyMode = true;
+            s.enemyCrazy = 0;
+            s.enemyCrazyModeStartTime = currentTime;
+        }
+    }
+    
+    // クレイジーモード終了チェック
+    inline bool shouldExitCrazyMode(const BattleState& s, bool isPlayer, double currentTime)
+    {
+        if (isPlayer)
+        {
+            if (!s.playerCrazyMode) return false;
+            return (currentTime - s.playerCrazyModeStartTime) >= BattleState::CrazyModeDurationSec;
+        }
+        else
+        {
+            if (!s.enemyCrazyMode) return false;
+            return (currentTime - s.enemyCrazyModeStartTime) >= BattleState::CrazyModeDurationSec;
+        }
+    }
+    
+    // クレイジーモード終了
+    inline void endCrazyMode(BattleState& s, bool isPlayer)
+    {
+        if (isPlayer)
+        {
+            s.playerCrazyMode = false;
+            s.playerCrazyModeStartTime = 0.0;
+        }
+        else
+        {
+            s.enemyCrazyMode = false;
+            s.enemyCrazyModeStartTime = 0.0;
+        }
+    }
 }
 
 

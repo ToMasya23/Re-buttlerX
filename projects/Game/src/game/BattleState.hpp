@@ -23,6 +23,13 @@ struct BattleState
     int32 playerCrazy = 0;
     int32 enemyCrazy = 0;
 
+    // ===== クレイジーモード =====
+    bool playerCrazyMode = false;
+    bool enemyCrazyMode = false;
+    double playerCrazyModeStartTime = 0.0;
+    double enemyCrazyModeStartTime = 0.0;
+    static constexpr double CrazyModeDurationSec = 30.0;
+
     // メッセージ
     String battleMessage;
 

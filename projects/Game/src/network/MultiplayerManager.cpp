@@ -432,6 +432,14 @@ bool MultiplayerManager::sendPacket(net::PacketType type, const void* payload, u
 	header.sequence = (type == net::PacketType::Heartbeat || type == net::PacketType::Handshake) ? 0 : m_nextSendSequence++;
 	header.checksum = (payload && payloadSize > 0) ? net::ComputeChecksum(payload, payloadSize) : 0;
 
+	s3d::Array<uint8> packet;
+	packet.resize(sizeof(header) + payloadSize);
+	std::memcpy(packet.data(), &header, sizeof(header));
+	if (payloadSize > 0)
+	{
+		std::memcpy(packet.data() + sizeof(header), payload, payloadSize);
+	}
+
 	bool success = false;
 
 	if (m_role == Role::Host)
@@ -441,19 +449,11 @@ bool MultiplayerManager::sendPacket(net::PacketType type, const void* payload, u
 			return false;
 		}
 
-		success = m_server.send(&header, sizeof(header), m_sessionID);
-		if (success && payloadSize > 0)
-		{
-			success = m_server.send(payload, payloadSize, m_sessionID);
-		}
+		success = m_server.send(packet.data(), packet.size(), m_sessionID);
 	}
 	else if (m_role == Role::Client)
 	{
-		success = m_client.send(&header, sizeof(header));
-		if (success && payloadSize > 0)
-		{
-			success = m_client.send(payload, payloadSize);
-		}
+		success = m_client.send(packet.data(), packet.size());
 	}
 
 	if (!success)

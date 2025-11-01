@@ -154,7 +154,7 @@ public:
 		{
 			int32 slot = g.m_state.enemyCastingSlot;
 			const int32 damage = BattleUtils::slotDamage(slot);
-			g.handleEnemyAttack(damage, net::BattleEventType::ClientAttackDamage, true);
+			g.handleEnemyAttack(slot, damage, net::BattleEventType::ClientAttackDamage, true);
 			BattleLogic::cancelCasting(g.m_state, false);
 			g.sendStateSync();
 		}
@@ -467,6 +467,18 @@ private:
 					break;
 				}
 				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
+				
+				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新
+				if (msg->eventType == net::BattleEventType::ClientAttackDamage || 
+				    msg->eventType == net::BattleEventType::ClientAttackBlocked)
+				{
+					int32 slotIndex = msg->secondaryValue;
+					if (slotIndex >= 0 && slotIndex < 4)
+					{
+						m_game.m_deck.onUse(slotIndex);
+						m_game.replaceUsedCardIfNeeded();
+					}
+				}
 			}
 			else if (type == net::PacketType::BattleEnd)
 			{
@@ -687,7 +699,7 @@ void Game::performPvEEnemyCounter()
 {
 	const int32 baseDamage = s3d::Random(8, 16);
 	const int32 finalDamage = m_state.defending ? 0 : baseDamage;
-	handleEnemyAttack(finalDamage, net::BattleEventType::ClientAttackDamage, false);
+	handleEnemyAttack(-1, finalDamage, net::BattleEventType::ClientAttackDamage, false);
 }
 
 
@@ -1038,21 +1050,27 @@ void Game::handleEscape(net::BattleEventType eventType, bool broadcastToClient)
 	finishBattleIfNeeded();
 }
 
-void Game::handleEnemyAttack(int32 damage, net::BattleEventType eventType, bool broadcastToClient)
+void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
 	m_state.playerHP = Max(0, m_state.playerHP - damage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
 	BattleLogic::addCrazy(m_state, false, +20);
 
+	if (slotIndex >= 0 && slotIndex < 4)
+	{
+		m_deck.onUse(slotIndex);
+	}
+
 	const uint32 flags = net::EventFlagHitPlayer;
-	emitLocalEvent(eventType, damage, 0, flags);
+	emitLocalEvent(eventType, damage, slotIndex, flags);
 
 	if (broadcastToClient)
 	{
 		sendStateSync();
-		broadcastEventToClient(eventType, damage, 0, flags);
+		broadcastEventToClient(eventType, damage, slotIndex, flags);
 	}
 
+	replaceUsedCardIfNeeded();
 	finishBattleIfNeeded();
 }
 
