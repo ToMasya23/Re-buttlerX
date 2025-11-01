@@ -1,6 +1,9 @@
 # pragma once
 # include "BattleState.hpp"
 
+// Forward declaration
+class CardDeck;
+
 namespace BattleUtils
 {
     inline ColorF hpColor(int hp, int maxHP)
@@ -11,18 +14,29 @@ namespace BattleUtils
         else return ColorF{ 0.9, 0.3, 0.3 };
     }
 
-    inline int32 slotDamage(int slotIndex)
+    // 文字数ベースのダメージ計算
+    inline int32 calculateDamage(const String& cardName)
     {
-        static constexpr int32 Damage1 = 10;
-        static constexpr int32 Damage2 = 20;
-        switch (slotIndex)
-        {
-        case 0: return Damage1;
-        case 1: return Damage2;
-        case 2: return Damage1 + 5;
-        case 3: return Damage2 + 10;
-        default: return Damage1;
-        }
+        constexpr int32 BASE_DAMAGE = 3;
+        constexpr int32 DAMAGE_PER_CHAR = 1.5;
+        size_t charCount = cardName.length();
+        return BASE_DAMAGE + (static_cast<int32>(charCount) * DAMAGE_PER_CHAR);
+    }
+
+    // スロットのダメージ取得（CardDeckを参照）
+    // 実装はCardDeck.hppの後に定義
+    inline int32 slotDamage(int slotIndex, const CardDeck& deck);
+}
+
+// CardDeck.hppをインクルード後に実装
+#include "CardDeck.hpp"
+
+namespace BattleUtils
+{
+    inline int32 slotDamage(int slotIndex, const CardDeck& deck)
+    {
+        const CardSpec& actualCard = deck.getActualCard(slotIndex);
+        return calculateDamage(actualCard.name);
     }
 }
 

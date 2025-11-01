@@ -78,7 +78,7 @@ public:
 				return false;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 
 			if (!BattleLogic::canAttack(g.m_state))
 			{
@@ -86,13 +86,13 @@ public:
 				return true;
 			}
 
-			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			if (!BattleLogic::trySpendCost(g.m_state, visualCard.cost))
 			{
 				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, false);
 				return true;
 			}
 
-			const int32 damage = BattleUtils::slotDamage(slotIndex);
+			const int32 damage = BattleUtils::slotDamage(slotIndex, g.m_deck);
 			g.handlePlayerAttack(slotIndex, damage, net::BattleEventType::HostAttackDamage, false);
 			g.performPvEEnemyCounter();
 			return true;
@@ -161,7 +161,7 @@ public:
 		if (BattleLogic::isCastingComplete(g.m_state, true))
 		{
 			int32 slot = g.m_state.playerCastingSlot;
-			const int32 damage = BattleUtils::slotDamage(slot);
+			const int32 damage = BattleUtils::slotDamage(slot, g.m_deck);
 			g.handlePlayerAttack(slot, damage, net::BattleEventType::HostAttackDamage, true);
 			BattleLogic::cancelCasting(g.m_state, true);
 			g.sendStateSync();
@@ -171,7 +171,7 @@ public:
 		if (BattleLogic::isCastingComplete(g.m_state, false))
 		{
 			int32 slot = g.m_state.enemyCastingSlot;
-			const int32 damage = BattleUtils::slotDamage(slot);
+			const int32 damage = BattleUtils::slotDamage(slot, g.m_deck);
 			g.handleEnemyAttack(slot, damage, net::BattleEventType::ClientAttackDamage, true);
 			BattleLogic::cancelCasting(g.m_state, false);
 			g.sendStateSync();
@@ -191,23 +191,23 @@ public:
 				return true;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 			if (!BattleLogic::canAttack(g.m_state))
 			{
 				g.handleActionRejected(1, net::BattleEventType::HostActionRejected, true);
 				return true;
 			}
 
-			if (!BattleLogic::trySpendCost(g.m_state, card.cost))
+			if (!BattleLogic::trySpendCost(g.m_state, visualCard.cost))
 			{
 				g.handleActionRejected(0, net::BattleEventType::HostActionRejected, true);
 				return true;
 			}
 
 			// 詠唱開始（即座にダメージは与えない）
-			double castTime = BattleLogic::calculateCastTime(card.name);
-			BattleLogic::startCasting(g.m_state, true, slotIndex, card.name, castTime);
-			g.pushLog(U"「" + card.name + U"」を詠唱中...");
+			double castTime = BattleLogic::calculateCastTime(visualCard.name);
+			BattleLogic::startCasting(g.m_state, true, slotIndex, visualCard.name, castTime);
+			g.pushLog(U"「" + visualCard.name + U"」を詠唱中...");
 			g.sendStateSync();
 			return true;
 		};
@@ -307,7 +307,7 @@ private:
 		case ActionType::Attack4:
 		{
 			const int slotIndex = Clamp(static_cast<int>(msg.slotIndex), 0, 3);
-			
+
 			// クライアントが詠唱中なら拒否
 			if (g.m_state.enemyCasting)
 			{
@@ -315,7 +315,8 @@ private:
 				return;
 			}
 
-			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? cards[slotIndex].cost : 20.0;
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
+			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? visualCard.cost : 20.0;
 			if (g.remoteAvailableCost() < cost)
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, true);
@@ -323,13 +324,12 @@ private:
 			}
 
 			g.consumeRemoteCost(cost);
-			
+
 			// 詠唱開始（クライアント側）
 			if (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size()))
 			{
-				const CardSpec& card = cards[slotIndex];
-				double castTime = BattleLogic::calculateCastTime(card.name);
-				BattleLogic::startCasting(g.m_state, false, slotIndex, card.name, castTime);
+				double castTime = BattleLogic::calculateCastTime(visualCard.name);
+				BattleLogic::startCasting(g.m_state, false, slotIndex, visualCard.name, castTime);
 				g.sendStateSync();
 			}
 			break;
@@ -398,21 +398,21 @@ public:
 				return true;
 			}
 
-			const CardSpec& card = cards[slotIndex];
+			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
 			if (!BattleLogic::canAttack(g.m_state))
 			{
 				g.handleActionRejected(1, net::BattleEventType::ClientActionRejected, false);
 				return true;
 			}
 
-			if (g.m_state.cost() < card.cost)
+			if (g.m_state.cost() < visualCard.cost)
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, false);
 				return true;
 			}
 
 			sendRequest(actionTypeFromSlot(slotIndex), slotIndex);
-			g.pushLog(U"「" + card.name + U"」を詠唱要求...");
+			g.pushLog(U"「" + visualCard.name + U"」を詠唱要求...");
 			return true;
 		};
 
@@ -845,8 +845,16 @@ void Game::applyStateSync(const net::StateSnapshotMessage& msg)
 	m_state.playerHP = msg.clientHP;
 	m_state.enemyHP = msg.hostHP;
 	m_state.costValue = msg.clientCost;
-	m_state.playerCrazy = msg.clientCrazy;
-	m_state.enemyCrazy = msg.hostCrazy;
+	
+	// クレイジーモード中はゲージを上書きしない
+	if (!m_state.playerCrazyMode)
+	{
+		m_state.playerCrazy = msg.clientCrazy;
+	}
+	if (!m_state.enemyCrazyMode)
+	{
+		m_state.enemyCrazy = msg.hostCrazy;
+	}
 
 	// クライアント側（自分）の状態デコード
 	if (msg.clientDefending == 2)
@@ -1034,15 +1042,22 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
 	const int32 finalDamage = m_remoteDefending ? 0 : damage;
 	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
-	
+
 	// 防御成功時はクレイジーゲージを変更しない
 	if (finalDamage > 0)
 	{
 		BattleLogic::addCrazy(m_state, true, +20);
 		BattleLogic::addCrazy(m_state, false, -10);
 	}
-	
+
 	m_deck.onUse(slotIndex);
+
+	// クレイジーモード中は実際のカード名を表示
+	if (m_deck.isCrazyMode() && slotIndex >= 0)
+	{
+		const CardSpec& actualCard = m_deck.getActualCard(slotIndex);
+		pushLog(U"→ 実際は「" + actualCard.name + U"」が発動！");
+	}
 
 	// 防御成功時はAttackBlockedイベントに変更
 	net::BattleEventType actualEventType = eventType;
@@ -1308,17 +1323,15 @@ void Game::draw() const
 			else
 			{
 				// 通常：カードを表示
-				const auto& cards = m_deck.current();
-				const auto& last = m_deck.lastDisplayed();
-				const bool hasCurrent = (slot < static_cast<int>(cards.size()));
-				const bool hasLast = (!hasCurrent && (slot < static_cast<int>(last.size())));
+				const bool hasCurrent = (slot < static_cast<int>(m_deck.current().size()));
+				const bool hasLast = (!hasCurrent && (slot < static_cast<int>(m_deck.lastDisplayed().size())));
 				const bool hasAny = hasCurrent || hasLast;
 				const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
 				rr.draw(base).drawFrame(2);
 				String title;
 				if (hasAny)
 				{
-					const CardSpec& c = hasCurrent ? cards[slot] : last[slot];
+					const CardSpec& c = hasCurrent ? m_deck.getVisualCard(slot) : m_deck.lastDisplayed()[slot];
 					title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
 				}
 				else

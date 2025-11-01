@@ -53,14 +53,18 @@ namespace BattleLogic
 
     // ===== 詠唱システム =====
     
-    // 詠唱時間計算
+    // 詠唱時間計算（文字数が長いほど非線形に増加）
     constexpr double BASE_CAST_TIME = 0.5;
-    constexpr double CHAR_CAST_TIME = 0.1;
+    constexpr double CHAR_CAST_TIME_LINEAR = 0.08;
+    constexpr double CHAR_CAST_TIME_SQUARE = 0.015;
     
     inline double calculateCastTime(const String& cardName)
     {
         size_t charCount = cardName.length();
-        return BASE_CAST_TIME + (charCount * CHAR_CAST_TIME);
+        // 基礎時間 + 線形増加 + 2乗増加（ハイリスクハイリターン）
+        return BASE_CAST_TIME 
+             + (charCount * CHAR_CAST_TIME_LINEAR) 
+             + (charCount * charCount * CHAR_CAST_TIME_SQUARE);
     }
     
     // 詠唱開始
