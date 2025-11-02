@@ -1,4 +1,4 @@
-# include "EffectViewer.hpp"
+﻿# include "EffectViewer.hpp"
 
 EffectViewerScene::EffectViewerScene(const InitData& init)
 	: IScene{ init }
@@ -10,7 +10,7 @@ void EffectViewerScene::update()
 {
     if (KeyEscape.down())
     {
-        changeScene(State::Game);
+        changeScene(State::Lobby);
     }
 }
 

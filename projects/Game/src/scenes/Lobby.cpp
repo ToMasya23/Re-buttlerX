@@ -41,6 +41,7 @@ Lobby::Lobby(const InitData& init)
 {
 	mIconPVP = s3d::Texture{ U"assets/ui/PvP.png", TextureDesc::Unmipped };
 	mIconPVE = s3d::Texture{ U"assets/ui/PvE.png", TextureDesc::Unmipped };
+	mCharImage = s3d::Texture{ U"assets/ui/characters/主人公.jpg", s3d::TextureDesc::Unmipped };
 
 	recalcLayout(Scene::Size());
 
@@ -66,7 +67,7 @@ void Lobby::recalcLayout(const Size& size) {
 	mAvatarL = Circle{ mLeftX + 22, mTopY + 22, 18 };
 
 	// 角色占位框（移到中间，不挡左侧文字）
-	mCharBox = RectF{ 200, 260, 240, 280 };
+	mCharBox = RectF{ 200, 260, 240, 320 };
 
 	// 右下暂停按钮
 	mPauseBtn = RoundRect{ RectF{ mOuter.x + mOuter.w - 110, mOuter.y + mOuter.h - 80, 90, 64 }, 18 };
@@ -227,12 +228,20 @@ void Lobby::draw() const
 			mUI(items[i]).draw(listX + 24, y, UI::Text);
 		}
 
-		// 角色占位（贴图化时把下面两行替换为 Texture.fitted(...).drawAt(...)）
-		const RoundRect box{ mCharBox, 16 };
-		box.draw(ColorF{ 0.90, 0.94, 1.0 });
-		box.drawFrame(5, 0, UI::Frame);
-		Ellipse{ mCharBox.center().movedBy(0, mCharBox.h * 0.55), 90, 12 }
-		.draw(ColorF(0, 0, 0, 0.12));
+		// 预留一点内边距，避免贴图压到边框
+		const s3d::RectF content = mCharBox.stretched(-12);
+
+		// 如果有图就画图，没图仍然画原来的阴影占位
+		if (mCharImage)
+		{
+			// 保持像素风：使用最近邻采样
+			const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+
+			const double sx = content.w / mCharImage.width();
+			const double sy = content.h / mCharImage.height();
+			const double s = s3d::Min(sx, sy);                 // 等比缩放
+			mCharImage.scaled(s).drawAt(content.center());      // 居中绘制
+		}
 
 		// 右上资料条
 		const RoundRect bar{ mRightTop, 18 };

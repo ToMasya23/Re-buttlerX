@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 
 // クレイジー割合に応じた顔テクスチャ選択
@@ -11,10 +11,10 @@ struct FaceTextures
 
     void load()
     {
-        smile = s3d::Texture{ U"assets/ui/faces/smile.png" };
-        magao = s3d::Texture{ U"assets/ui/faces/magao.png" };
-        cloudy = s3d::Texture{ U"assets/ui/faces/cloudy.png" };
-        crying = s3d::Texture{ U"assets/ui/faces/crying.png" };
+        smile = s3d::Texture{ U"assets/ui/faces/笑顔CG一.png" };
+        magao = s3d::Texture{ U"assets/ui/faces/真顔CG二.png" };
+        cloudy = s3d::Texture{ U"assets/ui/faces/怪しめCG三.png" };
+        crying = s3d::Texture{ U"assets/ui/faces/泣きCG四.png" };
     }
 
     const s3d::Texture& select(int crazyPercent) const

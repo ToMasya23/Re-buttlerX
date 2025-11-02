@@ -1,4 +1,4 @@
-#include "Game.hpp"
+﻿#include "Game.hpp"
 #include "../game/BattleLogic.hpp"
 #include "../game/BattleUtils.hpp"
 #include "../tools/NineSlice.hpp"
@@ -542,6 +542,10 @@ Game::Game(const InitData& init)
 
 	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
 	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy.png", s3d::TextureDesc::Unmipped };
+	m_texAvatarL = s3d::Texture{ U"assets/ui/characters/主人公icon.jpg", s3d::TextureDesc::Unmipped };
+	m_texDefendOn = s3d::Texture{ U"assets/ui/defend_on.png",       s3d::TextureDesc::Unmipped };
+	m_texDefendOff = s3d::Texture{ U"assets/ui/defend_off.png",      s3d::TextureDesc::Unmipped };
+
 
 	if (getData().multiplayer)
 	{
@@ -1369,10 +1373,54 @@ void Game::draw() const
 		const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
 		panelRR.draw(ColorF{ 1.0, 0.95 });
 		BaseFrame().draw(panelRR.rect);
-		BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
-		const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
-		defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
-		FontAsset(U"Bold")(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+
+		//BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
+		// === 头像改为贴图 ===
+		{
+			// 原来的头像矩形，向内收一点避免贴到边框
+			const RectF iconRect = BattleLayout::PlayerIconRect(playerPanel).stretched(-4);
+			if (m_texAvatarL) {
+				drawFit(m_texAvatarL, iconRect);   // 等比缩放居中
+			}
+			else {
+				iconRect.rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 }); // 兜底
+			}
+		}
+		//const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+		//defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
+		//FontAsset(U"Bold")(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+		// === 防御按钮改为贴图 ===
+		{
+			const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
+
+			// 按钮底色（可保留，或删除）
+			defendBtn.rect.draw(ColorF{ 1.0 });
+
+			// 选择贴图：防御中显示 ON，否则 OFF
+			const bool isDefending = m_state.defending;
+			const s3d::Texture& tex = isDefending ? m_texDefendOn : m_texDefendOff;
+
+			// 贴图区域留一点内边距
+			const RectF dst = defendBtn.rect.stretched(-6);
+
+			if (tex) {
+				drawFit(tex, dst);
+			}
+
+			// 边框
+			//defendBtn.drawFrame(2, 0, ColorF{ 0.2, 0.2, 0.3 });
+
+			// （可选）若当前不能防御，叠一层禁用遮罩
+			const bool cannotDefend = (!BattleLogic::canDefend(m_state) || (m_state.cost() < 20));
+			if (cannotDefend) {
+				defendBtn.rect.draw(ColorF{ 0.0, 0.0, 0.0, 0.25 });
+			}
+
+			// （可选）hover 小高亮
+			if (defendBtn.mouseOver()) {
+				defendBtn.rect.draw(ColorF{ 1.0, 0.06 });
+			}
+		}
 
 		if (!m_eventLog.isEmpty())
 		{

@@ -111,6 +111,8 @@ private:
 	s3d::Texture mIconPVP;       // 对人战
 	s3d::Texture mIconPVE;       // 练习战
 
+	s3d::Texture mCharImage;
+
 	s3d::Circle mAvatarL;
 	s3d::RectF  mCharBox;
 
