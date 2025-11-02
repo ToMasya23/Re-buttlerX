@@ -30,6 +30,7 @@ private:
     // Defend state
     bool m_defending = false;
     Stopwatch m_defendTimer{ StartImmediately::No };
+    static constexpr double EnemyDefendDuration = 3.0;
 
     // Casting state
     bool m_casting = false;
