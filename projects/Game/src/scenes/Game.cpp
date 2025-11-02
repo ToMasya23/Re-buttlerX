@@ -10,6 +10,11 @@ namespace
     static constexpr int32 Damage1 = 10;
     static constexpr int32 Damage2 = 20;
 
+    // Enemy label positioning offsets
+    static constexpr double CastLabelOffsetY = -16.0;
+    static constexpr double DefendLabelOffsetX = -28.0;
+    static constexpr double DefendLabelOffsetY = -12.0;
+
     NineSliceSkin& ScreenFrame()
     {
         static NineSliceSkin skin{
@@ -362,11 +367,11 @@ void Game::draw() const
                     const RectF barFG{ barBG.x, barBG.y, w * p, 6 };
                     barBG.draw(ColorF{ 0.2, 0.2, 0.3 });
                     barFG.draw(ColorF{ 1.0, 0.5, 0.2 });
-                    FontAsset(U"Bold")(U"詠唱中: {}"_fmt(m_enemy.displayedLabel())).draw(14, infoPos.movedBy(-entitySize.x * 0.5, -16), ColorF{ 0.95 });
+                    FontAsset(U"Bold")(U"詠唱中: {}"_fmt(m_enemy.displayedLabel())).draw(14, infoPos.movedBy(-entitySize.x * 0.5, CastLabelOffsetY), ColorF{ 0.95 });
                 }
                 else if (m_enemy.isDefending())
                 {
-                    FontAsset(U"Bold")(U"防御中").draw(14, infoPos.movedBy(-28, -12), ColorF{ 0.95 });
+                    FontAsset(U"Bold")(U"防御中").draw(14, infoPos.movedBy(DefendLabelOffsetX, DefendLabelOffsetY), ColorF{ 0.95 });
                 }
             }
 		}
