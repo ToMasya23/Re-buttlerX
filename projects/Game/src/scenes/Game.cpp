@@ -580,6 +580,12 @@ Game::Game(const InitData& init)
 	{
 		m_loop->onEnter();
 	}
+	AudioManager::instance().startBGM(U"assets/BGM/battle.mp3", 0.7);
+}
+
+Game::~Game()
+{
+	AudioManager::instance().stopBGM();
 }
 
 void Game::setupBattleLoop()
@@ -1558,7 +1564,7 @@ void Game::draw() const
 			// ゲージ前景
 			RectF{ gaugePos, gaugeWidth * progress, gaugeHeight }.draw(ColorF{ 0.8, 0.6, 0.2 });
 			// テキスト
-			FontAsset(U"Bold")(U"詠唱中: " + m_state.playerCastingCardName)
+			FontAsset(U"Bold")(U"入力中: " + m_state.playerCastingCardName)
 				.draw(24, Vec2{ gaugePos.x + 5, gaugePos.y - 25 }, ColorF{ 1.0 });
 			// 残り時間
 			const double remainingTime = m_state.playerCastDuration - m_state.playerCastTimer.sF();
