@@ -1,40 +1,47 @@
-﻿# include "Game.hpp"
+﻿// Header & helpers
+# include "Game.hpp"
 # include "../game/BattleLogic.hpp"
 # include "../game/BattleUtils.hpp"
 # include "../tools/NineSlice.hpp"
+
 namespace
 {
-	static constexpr int32 Damage1 = 10;
-	static constexpr int32 Damage2 = 20;
+    static constexpr int32 Damage1 = 10;
+    static constexpr int32 Damage2 = 20;
 
-	NineSliceSkin& ScreenFrame() {
-		static NineSliceSkin skin{
-			U"assets/ui/frames/battle_frame.png",
-			20, 20, 20, 20,
-			false
-		};
-		return skin;
-	}
+    NineSliceSkin& ScreenFrame()
+    {
+        static NineSliceSkin skin{
+            U"assets/ui/frames/battle_frame.png",
+            20, 20, 20, 20,
+            false
+        };
+        return skin;
+    }
 
-	NineSliceSkin& BaseFrame() {
-		static NineSliceSkin skin{
-			U"assets/ui/frames/battle_base.png",
-			20, 20, 20, 20,
-			false
-		};
-		return skin;
-	}
+    NineSliceSkin& BaseFrame()
+    {
+        static NineSliceSkin skin{
+            U"assets/ui/frames/battle_base.png",
+            20, 20, 20, 20,
+            false
+        };
+        return skin;
+    }
 
-	inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
-	{
-		const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
-		const double sx = dst.w / tex.width();
-		const double sy = dst.h / tex.height();
-		const double s = s3d::Min(sx, sy);
-		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } *s;
-		const s3d::Vec2 pos = dst.center() - size * 0.5;
-		tex.scaled(s).draw(pos, tint);
-	}
+    inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
+    {
+        const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+        const double sx = dst.w / tex.width();
+        const double sy = dst.h / tex.height();
+        const double s = s3d::Min(sx, sy);
+        const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } * s;
+        const s3d::Vec2 pos = dst.center() - size * 0.5;
+        tex.scaled(s).draw(pos, tint);
+    }
+
+    // 敵がクレイジー状態の時の偽装ラベル候補
+    static const Array<String> FakeActionLabels{ U"防御", U"強化", U"回復", U"挑発" };
 }
 
 Game::Game(const InitData& init)
@@ -47,21 +54,21 @@ Game::Game(const InitData& init)
         m_deck.refillRandom(4);
     }
 
-	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
-	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
-	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
+    // キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
+    m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
+    m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
 
-	AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
+    AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
 }
 
 void Game::update()
 {
-	// Esc でポーズをトグル
-	if (KeyEscape.down())
-	{
-		m_paused = (not m_paused);
-		return;
-	}
+    // Esc でポーズをトグル
+    if (KeyEscape.down())
+    {
+        m_paused = (not m_paused);
+        return;
+    }
 
     // 使用後のクールダウン掃除
     m_deck.cleanupCooldowns();
@@ -92,7 +99,6 @@ void Game::update()
         default:
             break;
         }
-
         return;
     }
 
@@ -101,6 +107,11 @@ void Game::update()
     {
         BattleLogic::regenCost(m_state, Scene::DeltaTime());
     }
+    // 敵コスト回復（停止条件を考慮）
+    if (!enemyIsRegenBlocked())
+    {
+        enemyRegenCost(Scene::DeltaTime());
+    }
 
     // 防御の継続時間チェック
     if (m_state.defending && (m_state.defendTimer.sF() >= BattleState::DefendDurationSec))
@@ -108,29 +119,29 @@ void Game::update()
         m_state.defending = false;
     }
 
-    // ---- メッセージ待機中は進行を止める ----
+    // ---- メッセージ待機中は進行を止める（AI 進行も止める） ----
     if (m_state.waitingForAcknowledge)
-	{
+    {
         if (BattleLogic::advanceInputDown())
-		{
+        {
             m_state.waitingForAcknowledge = false;
             if (m_state.nextAction == BattleState::NextAction::EnemyCounter)
-			{
-                BattleLogic::enemyCounter(m_state);
-			}
+            {
+                // 連続カウンターは廃止（AI が自律的に行動）
+            }
             else if (m_state.nextAction == BattleState::NextAction::FinishBattle)
-			{
-				finishBattleIfNeeded();
-			}
+            {
+                finishBattleIfNeeded();
+            }
             else if (m_state.nextAction == BattleState::NextAction::BackToSelection)
-			{
+            {
                 // そのまま選択に戻る（使用カードを1枚だけ置き換え）
                 m_deck.replaceUsedCard();
-			}
+            }
             m_state.nextAction = BattleState::NextAction::None;
-		}
-		return;
-	}
+        }
+        return;
+    }
 
     // 念のため：待機中でなく、置換待ちが残っていればここで実行
     if (m_deck.hasPendingReplacement())
@@ -138,17 +149,13 @@ void Game::update()
         m_deck.replaceUsedCard();
     }
 
-	// ---- カード補充（起動直後など空のとき） ----
+    // ---- カード補充（起動直後など空のとき） ----
     if (m_deck.current().isEmpty() && m_deck.hasCards())
-	{
+    {
         m_deck.refillRandom(4);
-	}
+    }
 
-	// 詠唱は使用しない（即時反映）
-
-    // インターバル再抽選の制御は未使用のため削除
-
-	// ---- PvE バトル更新 ----
+    // ---- PvE バトル更新 ----
     const Size sceneSize = Scene::Size();
 
     // 左上の攻撃ボタン群と逃げる（右端）
@@ -159,7 +166,6 @@ void Game::update()
     const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
 
     // 攻撃／逃げる／防御の入力
-    // 旧ホバー演出は未使用のため削除（escape のみ継続）
     const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
     const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
     if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
@@ -167,7 +173,7 @@ void Game::update()
         Cursor::RequestStyle(CursorStyle::Hand);
     }
 
-    // 攻撃可否（防御中・待機中・インターバル中・コスト不足で不可）
+    // 攻撃可否（防御中・待機中・コスト不足で不可）
     if (attackBtn1.leftClicked())
     {
         const auto& cards = m_deck.current();
@@ -177,9 +183,7 @@ void Game::update()
             const CardSpec& c = cards[0];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                // 即時攻撃へ反映
                 BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(0));
-                // 使用記録とクールダウン開始
                 m_deck.onUse(0);
             }
             else
@@ -299,6 +303,12 @@ void Game::update()
             m_state.nextAction = BattleState::NextAction::BackToSelection;
         }
     }
+
+    // ---- 敵 AI 更新（詠唱・防御・意思決定）----
+    if (!m_state.waitingForAcknowledge)
+    {
+        enemyUpdateAI();
+    }
 }
 
 void Game::draw() const
@@ -345,6 +355,25 @@ void Game::draw() const
 			const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
 			drawFit(m_texPlayer, pRect, playerColor);
 			drawFit(m_texEnemy,  eRect,  enemyColor);
+
+            // 敵の状態表示（詠唱・防御）
+            {
+                const Vec2 infoPos = enemyPos + Vec2{ entitySize.x * 0.5, -12 };
+                if (m_enemyCasting)
+                {
+                    const double p = Clamp(m_enemyCastTimeSec > 0.0 ? (m_enemyCastTimer.sF() / m_enemyCastTimeSec) : 0.0, 0.0, 1.0);
+                    const double w = entitySize.x;
+                    const RectF barBG{ enemyPos.x, enemyPos.y - 18, w, 6 };
+                    const RectF barFG{ barBG.x, barBG.y, w * p, 6 };
+                    barBG.draw(ColorF{ 0.2, 0.2, 0.3 });
+                    barFG.draw(ColorF{ 1.0, 0.5, 0.2 });
+                    FontAsset(U"Bold")(U"詠唱中: {}"_fmt(m_enemyDisplayedLabel)).draw(14, infoPos.movedBy(-entitySize.x * 0.5, -16), ColorF{ 0.95 });
+                }
+                else if (m_enemyDefending)
+                {
+                    FontAsset(U"Bold")(U"防御中").draw(14, infoPos.movedBy(-28, -12), ColorF{ 0.95 });
+                }
+            }
 		}
 
 		const Font& bold = FontAsset(U"Bold");
@@ -492,5 +521,136 @@ void Game::finishBattleIfNeeded()
         getData().lastScore = Max(0, m_state.playerHP);
 		changeScene(State::Result);
 	}
+}
+
+
+// =========================
+// 敵 AI 実装
+// =========================
+void Game::enemyRegenCost(double dt)
+{
+    m_enemyCostValue = Min(100.0, m_enemyCostValue + (EnemyCostRegenPerSec * dt));
+}
+
+bool Game::enemyIsRegenBlocked() const
+{
+    return (m_enemyDefending || m_state.waitingForAcknowledge);
+}
+
+bool Game::enemyTrySpendCost(int32 amount)
+{
+    if (enemyCost() < amount)
+    {
+        return false;
+    }
+    m_enemyCostValue = Max(0.0, m_enemyCostValue - amount);
+    return true;
+}
+
+void Game::enemyStartDefend()
+{
+    if (m_enemyDefending)
+        return;
+    if (!enemyTrySpendCost(20))
+        return;
+    m_enemyDefending = true;
+    m_enemyDefendTimer.restart();
+    // 軽いメッセージを表示（進行一時停止）
+    m_state.battleMessage = U"敵は防御体勢に入った！";
+    m_state.waitingForAcknowledge = true;
+    m_state.nextAction = BattleState::NextAction::BackToSelection;
+}
+
+void Game::enemyStartCastAttack(int32 damage, double castSec, const String& label, const String& displayLabel)
+{
+    if (m_enemyCasting)
+        return;
+    // 攻撃コストは仮に 10
+    if (!enemyTrySpendCost(10))
+        return;
+    m_enemyCasting = true;
+    m_enemyPlannedDamage = Max(0, damage);
+    m_enemyCastTimeSec = Max(0.1, castSec);
+    m_enemyPlannedLabel = label;
+    m_enemyDisplayedLabel = displayLabel;
+    m_enemyCastTimer.restart();
+}
+
+void Game::enemyResolveCast()
+{
+    m_enemyCasting = false;
+    const bool playerBlocked = m_state.defending;
+    const int32 dealt = playerBlocked ? 0 : m_enemyPlannedDamage;
+    m_state.playerHP = Max(0, m_state.playerHP - dealt);
+    // 敵の攻撃でプレイヤーのクレイジーが増加
+    BattleLogic::addCrazy(m_state, false, +20);
+    // 敵はクレイジーを少し発散
+    BattleLogic::addCrazy(m_state, true, -30);
+    BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+    m_state.battleMessage = (dealt == 0)
+        ? U"敵の{}は防がれた！0のダメージ！"_fmt(m_enemyPlannedLabel)
+        : U"敵は{}を発動！{}のダメージ！"_fmt(m_enemyPlannedLabel, dealt);
+    m_state.waitingForAcknowledge = true;
+    m_state.nextAction = BattleState::NextAction::BackToSelection;
+}
+
+void Game::enemyUpdateAI()
+{
+    // 防御の継続時間
+    if (m_enemyDefending && (m_enemyDefendTimer.sF() >= BattleState::DefendDurationSec))
+    {
+        m_enemyDefending = false;
+    }
+
+    // 詠唱中の進行
+    if (m_enemyCasting)
+    {
+        if (m_enemyCastTimer.sF() >= m_enemyCastTimeSec)
+        {
+            enemyResolveCast();
+        }
+        return; // 詠唱中は新規行動しない
+    }
+
+    // 意思決定（簡易ルール）
+    // 低 HP かつコスト充分なら防御優先
+    if (!m_enemyDefending && (m_state.enemyHP <= 25) && enemyCost() >= 20)
+    {
+        enemyStartDefend();
+        return;
+    }
+
+    // 攻撃：コスト充分、非防御時
+    if (!m_enemyDefending && enemyCost() >= 10)
+    {
+        // ダメージと詠唱時間をクレイジーや乱数で決定
+        int32 dmg = 0;
+        if (m_state.enemyCrazy < 60)
+        {
+            dmg = Random(8, 16);
+        }
+        else if (m_state.enemyCrazy < 100)
+        {
+            dmg = Random(12, 22);
+        }
+        else
+        {
+            // クレイジー状態：よりハイリスク/ハイリターン
+            dmg = Random(6, 28);
+        }
+        const double castSec = Random(0.5, 1.4);
+
+        // ラベル（実際と表示）。クレイジー時はあべこべ表示
+        const String realLabel = U"攻撃";
+        String displayLabel = realLabel;
+        if (enemyInCrazy())
+        {
+            // 表示は偽装（例：防御っぽく見せる）
+            displayLabel = FakeActionLabels.choice();
+        }
+
+        enemyStartCastAttack(dmg, castSec, realLabel, displayLabel);
+        return;
+    }
 }
 

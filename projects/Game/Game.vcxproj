@@ -72,6 +72,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <DisableSpecificWarnings>26451;26812;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <AdditionalOptions>/Zc:__cplusplus /utf-8 %(AdditionalOptions)</AdditionalOptions>
+  <AdditionalOptions>/Zc:__cplusplus /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <BuildStlModules>false</BuildStlModules>
@@ -100,6 +101,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <DisableSpecificWarnings>26451;26812;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <AdditionalOptions>/Zc:__cplusplus /utf-8 %(AdditionalOptions)</AdditionalOptions>
+  <AdditionalOptions>/Zc:__cplusplus /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <BuildStlModules>false</BuildStlModules>
@@ -128,6 +130,7 @@
     <ClCompile Include="src\pause\EffectViewer.cpp" />
     <ClCompile Include="src\pause\HowToPlay.cpp" />
     <ClCompile Include="src\pause\Settings.cpp" />
+    
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -338,8 +341,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Common.hpp" />
-    <ClInclude Include="src\Game.hpp" />
-    <ClInclude Include="src\Title.hpp" />
+    <ClInclude Include="src\scenes\Game.hpp" />
+    <ClInclude Include="src\scenes\Title.hpp" />
+    <ClInclude Include="src\scenes\Menu.hpp" />
+    <ClInclude Include="src\scenes\Battle.hpp" />
+    <ClInclude Include="src\scenes\Lobby.hpp" />
+    <ClInclude Include="src\scenes\Matching.hpp" />
+    <ClInclude Include="src\scenes\Result.hpp" />
+    <ClInclude Include="src\pause\Settings.hpp" />
+    <ClInclude Include="src\pause\HowToPlay.hpp" />
+    <ClInclude Include="src\pause\EffectViewer.hpp" />
+    <ClInclude Include="src\ui\BattleLayout.hpp" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
