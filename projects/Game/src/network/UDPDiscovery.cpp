@@ -35,11 +35,11 @@ bool UDPDiscovery::startAdvertising(const String& passphrase, const String& game
 {
 	if (m_role != Role::None)
 	{
-		Console << U"[UDPDiscovery] Already active in another role";
+		//Console << U"[UDPDiscovery] Already active in another role";
 		return false;
 	}
 
-	Console << U"[UDPDiscovery] Starting host with passphrase: " << passphrase;
+	//Console << U"[UDPDiscovery] Starting host with passphrase: " << passphrase;
 
 	m_passphrase = passphrase;
 	m_gameName = gameName;
@@ -49,7 +49,7 @@ bool UDPDiscovery::startAdvertising(const String& passphrase, const String& game
 	m_socket = NetworkPlatform::CreateUDPSocket();
 	if (m_socket == NetworkPlatform::INVALID_SOCKET_HANDLE)
 	{
-		Console << U"[UDPDiscovery] Failed to create UDP socket";
+		//Console << U"[UDPDiscovery] Failed to create UDP socket";
 		return false;
 	}
 
@@ -67,15 +67,15 @@ bool UDPDiscovery::startAdvertising(const String& passphrase, const String& game
 	// ポートにバインド
 	if (!NetworkPlatform::BindSocket(m_socket, DISCOVERY_PORT))
 	{
-		Console << U"[UDPDiscovery] Failed to bind to port " << DISCOVERY_PORT;
+		//Console << U"[UDPDiscovery] Failed to bind to port " << DISCOVERY_PORT;
 		NetworkPlatform::CloseSocket(m_socket);
 		m_socket = NetworkPlatform::INVALID_SOCKET_HANDLE;
 		return false;
 	}
 
 	m_role = Role::Host;
-	Console << U"[UDPDiscovery] Host started successfully on port " << DISCOVERY_PORT;
-	Console << U"[演出] SNSに投稿しました！合言葉: " << passphrase;
+	//Console << U"[UDPDiscovery] Host started successfully on port " << DISCOVERY_PORT;
+	//Console << U"[演出] SNSに投稿しました！合言葉: " << passphrase;
 	return true;
 }
 
@@ -83,7 +83,7 @@ void UDPDiscovery::stopAdvertising()
 {
 	if (m_role == Role::Host)
 	{
-		Console << U"[UDPDiscovery] Stopping host";
+		//Console << U"[UDPDiscovery] Stopping host";
 		NetworkPlatform::CloseSocket(m_socket);
 		m_socket = NetworkPlatform::INVALID_SOCKET_HANDLE;
 		m_role = Role::None;
@@ -94,11 +94,11 @@ bool UDPDiscovery::startSearching(const String& passphrase)
 {
 	if (m_role != Role::None)
 	{
-		Console << U"[UDPDiscovery] Already active in another role";
+		//Console << U"[UDPDiscovery] Already active in another role";
 		return false;
 	}
 
-	Console << U"[UDPDiscovery] Starting client search with passphrase: " << passphrase;
+	//Console << U"[UDPDiscovery] Starting client search with passphrase: " << passphrase;
 
 	m_passphrase = passphrase;
 	m_discoveredHosts.clear();
@@ -109,7 +109,7 @@ bool UDPDiscovery::startSearching(const String& passphrase)
 	m_socket = NetworkPlatform::CreateUDPSocket();
 	if (m_socket == NetworkPlatform::INVALID_SOCKET_HANDLE)
 	{
-		Console << U"[UDPDiscovery] Failed to create UDP socket";
+		//Console << U"[UDPDiscovery] Failed to create UDP socket";
 		return false;
 	}
 
@@ -124,15 +124,15 @@ bool UDPDiscovery::startSearching(const String& passphrase)
 	// ブロードキャスト許可
 	if (!NetworkPlatform::SetBroadcast(m_socket, true))
 	{
-		Console << U"[UDPDiscovery] Failed to enable broadcast";
+		//Console << U"[UDPDiscovery] Failed to enable broadcast";
 		NetworkPlatform::CloseSocket(m_socket);
 		m_socket = NetworkPlatform::INVALID_SOCKET_HANDLE;
 		return false;
 	}
 
 	m_role = Role::Client;
-	Console << U"[UDPDiscovery] Client search started";
-	Console << U"[演出] 噛みつき中...";
+	//Console << U"[UDPDiscovery] Client search started";
+	//Console << U"[演出] 噛みつき中...";
 	return true;
 }
 
@@ -140,7 +140,7 @@ void UDPDiscovery::stopSearching()
 {
 	if (m_role == Role::Client)
 	{
-		Console << U"[UDPDiscovery] Stopping client search";
+		//Console << U"[UDPDiscovery] Stopping client search";
 		NetworkPlatform::CloseSocket(m_socket);
 		m_socket = NetworkPlatform::INVALID_SOCKET_HANDLE;
 		m_role = Role::None;
@@ -177,15 +177,15 @@ void UDPDiscovery::updateHost()
 			// 合言葉チェック
 			if (receivedPassphrase == m_passphrase)
 			{
-				Console << U"[Host] ゲストが噛みついてきた！合言葉一致: " << receivedPassphrase;
-				Console << U"[演出] 噛みついた相手を発見！";
+				//Console << U"[Host] ゲストが噛みついてきた！合言葉一致: " << receivedPassphrase;
+				//Console << U"[演出] 噛みついた相手を発見！";
 
 				// レスポンス送信
 				sendResponse(recvResult.senderAddress, recvResult.senderPort);
 			}
 			else
 			{
-				Console << U"[Host] 合言葉不一致。無視します。(受信: " << receivedPassphrase << U")";
+				//Console << U"[Host] 合言葉不一致。無視します。(受信: " << receivedPassphrase << U")";
 			}
 		}
 	}
@@ -198,7 +198,7 @@ void UDPDiscovery::updateClient()
 	// 一定間隔でブロードキャスト送信
 	if (currentTime - m_lastBroadcastTime >= BROADCAST_INTERVAL)
 	{
-		Console << U"[Client] 合言葉「" << m_passphrase << U"」で噛みつき中...";
+		//Console << U"[Client] 合言葉「" << m_passphrase << U"」で噛みつき中...";
 		sendDiscoveryRequest();
 		m_lastBroadcastTime = currentTime;
 	}
@@ -213,8 +213,8 @@ void UDPDiscovery::updateClient()
 
 		if (isValidResponse(data))
 		{
-			Console << U"[Client] マッチング成功！ホストを発見: " << recvResult.senderAddress.str();
-			Console << U"[演出] 噛みついた相手を発見！接続します...";
+			//Console << U"[Client] マッチング成功！ホストを発見: " << recvResult.senderAddress.str();
+			//Console << U"[演出] 噛みついた相手を発見！接続します...";
 			addDiscoveredHost(data, recvResult.senderAddress, recvResult.senderPort);
 		}
 	}
@@ -222,7 +222,7 @@ void UDPDiscovery::updateClient()
 	// タイムアウトチェック
 	if (currentTime - m_searchStartTime > SEARCH_TIMEOUT)
 	{
-		Console << U"[Client] タイムアウト: ホストが見つかりませんでした（30秒経過）";
+		//Console << U"[Client] タイムアウト: ホストが見つかりませんでした（30秒経過）";
 		stopSearching();
 	}
 }
@@ -272,7 +272,7 @@ void UDPDiscovery::sendResponse(const IPv4Address& targetAddress, uint16 targetP
 
 	if (sent > 0)
 	{
-		Console << U"[UDPDiscovery] Response sent to " << targetAddress.str() << U":" << targetPort;
+		//Console << U"[UDPDiscovery] Response sent to " << targetAddress.str() << U":" << targetPort;
 	}
 }
 
@@ -296,7 +296,7 @@ void UDPDiscovery::sendDiscoveryRequest()
 
 	if (sent > 0)
 	{
-		Console << U"[UDPDiscovery] Broadcast request sent";
+		//Console << U"[UDPDiscovery] Broadcast request sent";
 	}
 }
 
@@ -328,7 +328,7 @@ void UDPDiscovery::addDiscoveredHost(const Array<uint8>& data, const IPv4Address
 	if (!found)
 	{
 		m_discoveredHosts.push_back(info);
-		Console << U"[UDPDiscovery] New host discovered: " << info.hostName << U" (" << address.str() << U":" << info.port << U")";
+		//Console << U"[UDPDiscovery] New host discovered: " << info.hostName << U" (" << address.str() << U":" << info.port << U")";
 	}
 }
 

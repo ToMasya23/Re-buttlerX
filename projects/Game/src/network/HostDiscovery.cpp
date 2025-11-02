@@ -8,7 +8,7 @@ HostDiscovery::HostDiscovery()
 
 void HostDiscovery::startSearching()
 {
-	Console << U"[HostDiscovery] 検索開始";
+	// Console << U"[HostDiscovery] 検索開始";
 	
 	m_isSearching = true;
 	m_discoveredHosts.clear();
@@ -18,12 +18,12 @@ void HostDiscovery::startSearching()
 	// スキャン対象のIPアドレスを生成
 	generateScanTargets();
 	
-	Console << U"[HostDiscovery] " << m_scanTargets.size() << U" 個のアドレスをスキャンします";
+	// Console << U"[HostDiscovery] " << m_scanTargets.size() << U" 個のアドレスをスキャンします";
 }
 
 void HostDiscovery::stop()
 {
-	Console << U"[HostDiscovery] 停止";
+	// Console << U"[HostDiscovery] 停止";
 	m_isSearching = false;
 	m_scanTargets.clear();
 	m_currentScanIndex = 0;
@@ -50,7 +50,7 @@ void HostDiscovery::update()
 	// 全てスキャン完了したら停止
 	if (m_currentScanIndex >= m_scanTargets.size())
 	{
-		Console << U"[HostDiscovery] スキャン完了。" << m_discoveredHosts.size() << U" 個のホストを発見";
+		// Console << U"[HostDiscovery] スキャン完了。" << m_discoveredHosts.size() << U" 個のホストを発見";
 		m_isSearching = false;
 	}
 }
@@ -73,7 +73,7 @@ void HostDiscovery::generateScanTargets()
 	if (localIP == IPv4Address{ 127, 0, 0, 1 } || localIP == IPv4Address{ 0, 0, 0, 0 })
 	{
 		// 検出失敗時は一般的なレンジをスキャン
-		Console << U"[HostDiscovery] ローカルIP検出失敗。一般的なレンジをスキャンします";
+		// Console << U"[HostDiscovery] ローカルIP検出失敗。一般的なレンジをスキャンします";
 		Array<Array<uint8>> commonRanges = {
 			{ 192, 168, 1 },
 			{ 192, 168, 0 }
@@ -96,13 +96,14 @@ void HostDiscovery::generateScanTargets()
 		uint8 b = ipData[1];
 		uint8 c = ipData[2];
 		
-		Console << U"[HostDiscovery] ローカルIP検出: " << (int)a << U"." << (int)b << U"." << (int)c << U".X";
+		// Console << U"[HostDiscovery] ローカルIP検出: " << (int)a << U"." << (int)b << U"." << (int)c << U".X";
 		
 		// 150.65.x.x のような大学/企業ネットワークの場合、複数のサブネットをスキャン
 		// 自分のサブネット + 隣接するサブネット（±10）をスキャン
-		Console << U"[HostDiscovery] サブネット " << (int)a << U"." << (int)b << U"." << (int)c << U".1-50";
-		Console << U"[HostDiscovery] および隣接サブネット（±10）をスキャンします";
+		// Console << U"[HostDiscovery] サブネット " << (int)a << U"." << (int)b << U"." << (int)c << U".1-50";
+		// Console << U"[HostDiscovery] および隣接サブネット（±10）をスキャンします";
 		
+
 		// 自分のサブネット
 		for (uint16 i = 1; i <= 50; ++i)
 		{
@@ -125,7 +126,7 @@ void HostDiscovery::generateScanTargets()
 		}
 	}
 	
-	Console << U"[HostDiscovery] " << m_scanTargets.size() << U" 個のアドレスをスキャン";
+	// Console << U"[HostDiscovery] " << m_scanTargets.size() << U" 個のアドレスをスキャン";
 }
 
 IPv4Address HostDiscovery::detectLocalIP()
@@ -139,22 +140,22 @@ IPv4Address HostDiscovery::detectLocalIP()
 		}
 
 		const auto& data = ip.getData();
-		Console << U"[HostDiscovery] Local IP detected: "
-			<< static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
-			<< U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
+		// Console << U"[HostDiscovery] Local IP detected: "
+			// << static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
+			// << U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
 		return ip;
 	}
 
 	if (!localIPs.isEmpty())
 	{
 		const auto& data = localIPs.front().getData();
-		Console << U"[HostDiscovery] Only loopback/local IPs detected, using "
-			<< static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
-			<< U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
+		// Console << U"[HostDiscovery] Only loopback/local IPs detected, using "
+			// << static_cast<int>(data[0]) << U"." << static_cast<int>(data[1])
+			// << U"." << static_cast<int>(data[2]) << U"." << static_cast<int>(data[3]);
 		return localIPs.front();
 	}
 
-	Console << U"[HostDiscovery] No local IP address available; using loopback";
+	// Console << U"[HostDiscovery] No local IP address available; using loopback";
 	return IPv4Address{ 127, 0, 0, 1 };
 }
 
@@ -192,7 +193,7 @@ void HostDiscovery::scanNextHost()
 			
 			m_discoveredHosts.push_back(newHost);
 			
-			Console << U"[HostDiscovery] ホスト発見: " << ipStr;
+			// Console << U"[HostDiscovery] ホスト発見: " << ipStr;
 			
 			testClient.disconnect();
 		}
@@ -201,7 +202,7 @@ void HostDiscovery::scanNextHost()
 
 Optional<uint16> HostDiscovery::findAvailablePort(uint16 startPort, uint16 range)
 {
-	Console << U"[HostDiscovery] 利用可能なポート検索中...";
+	// Console << U"[HostDiscovery] 利用可能なポート検索中...";
 	
 	for (uint16 port = startPort; port < startPort + range; ++port)
 	{
@@ -213,7 +214,7 @@ Optional<uint16> HostDiscovery::findAvailablePort(uint16 startPort, uint16 range
 		
 		// 実際にポートが開けているかチェック
 		// ポートが開けている場合は利用可能
-		Console << U"[HostDiscovery] ポート " << port << U" をテスト中";
+		// Console << U"[HostDiscovery] ポート " << port << U" をテスト中";
 		testServer.cancelAccept();
 		
 		// 次のポートで再試行（前のポートが使用可能なら成功）
@@ -226,7 +227,7 @@ Optional<uint16> HostDiscovery::findAvailablePort(uint16 startPort, uint16 range
 		return port;
 	}
 	
-	Console << U"[HostDiscovery] 利用可能なポートが見つかりませんでした";
+	// Console << U"[HostDiscovery] 利用可能なポートが見つかりませんでした";
 	return none;
 }
 

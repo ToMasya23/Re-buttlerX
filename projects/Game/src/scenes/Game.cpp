@@ -806,7 +806,7 @@ void Game::concludeBattle(net::BattleEndReason reason, bool hostWon)
 		m_multiplayer->send(msg);
 	}
 	getData().lastResult = hostWon == m_isHost;
-	Console << U"LastResult: " << getData().lastResult;
+	//Console << U"LastResult: " << getData().lastResult;
 	// if (m_multiplayer)
 	// {
 	// 	m_multiplayer->disconnect();

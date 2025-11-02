@@ -131,7 +131,7 @@ bool MultiplayerManager::send(const T& message)
 	static_assert(sizeof(T) <= net::MaxPayloadSize, "Message exceeds maximum payload size");
 	if (m_role != Traits::SenderRole)
 	{
-		Console << U"[MultiplayerManager] Attempted to send message from invalid role";
+		//Console << U"[MultiplayerManager] Attempted to send message from invalid role";
 		return false;
 	}
 	return sendPacket(Traits::Type, &message, static_cast<uint32>(sizeof(T)), Traits::AllowDuringHandshake);
@@ -154,7 +154,7 @@ s3d::Optional<T> MultiplayerManager::receive()
 
 	if (packet.payload.size() != sizeof(T))
 	{
-		Console << U"[MultiplayerManager] Payload size mismatch";
+		//Console << U"[MultiplayerManager] Payload size mismatch";
 		m_receiveQueue.pop_front();
 		return s3d::none;
 	}

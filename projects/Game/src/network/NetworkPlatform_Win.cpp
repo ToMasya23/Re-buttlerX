@@ -17,17 +17,17 @@ namespace NetworkPlatform
 		int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
 		if (result != 0)
 		{
-			Console << U"[NetworkPlatform] WSAStartup failed: " << result;
+			//Console << U"[NetworkPlatform] WSAStartup failed: " << result;
 			return false;
 		}
-		Console << U"[NetworkPlatform] Winsock initialized";
+		//Console << U"[NetworkPlatform] Winsock initialized";
 		return true;
 	}
 
 	void ShutdownNetworking()
 	{
 		WSACleanup();
-		Console << U"[NetworkPlatform] Winsock shutdown";
+		//Console << U"[NetworkPlatform] Winsock shutdown";
 	}
 
 	SocketHandle CreateUDPSocket()
@@ -35,7 +35,7 @@ namespace NetworkPlatform
 		SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if (sock == INVALID_SOCKET)
 		{
-			Console << U"[NetworkPlatform] socket() failed: " << WSAGetLastError();
+			//Console << U"[NetworkPlatform] socket() failed: " << WSAGetLastError();
 			return INVALID_SOCKET_HANDLE;
 		}
 		return static_cast<SocketHandle>(sock);
@@ -55,7 +55,7 @@ namespace NetworkPlatform
 		int result = ioctlsocket(static_cast<SOCKET>(socket), FIONBIO, &mode);
 		if (result != 0)
 		{
-			Console << U"[NetworkPlatform] ioctlsocket(FIONBIO) failed: " << WSAGetLastError();
+			//Console << U"[NetworkPlatform] ioctlsocket(FIONBIO) failed: " << WSAGetLastError();
 			return false;
 		}
 		return true;
@@ -73,7 +73,7 @@ namespace NetworkPlatform
 		);
 		if (result == SOCKET_ERROR)
 		{
-			Console << U"[NetworkPlatform] setsockopt(SO_REUSEADDR) failed: " << WSAGetLastError();
+			//Console << U"[NetworkPlatform] setsockopt(SO_REUSEADDR) failed: " << WSAGetLastError();
 			return false;
 		}
 		return true;
@@ -91,7 +91,7 @@ namespace NetworkPlatform
 		);
 		if (result == SOCKET_ERROR)
 		{
-			Console << U"[NetworkPlatform] setsockopt(SO_BROADCAST) failed: " << WSAGetLastError();
+			//Console << U"[NetworkPlatform] setsockopt(SO_BROADCAST) failed: " << WSAGetLastError();
 			return false;
 		}
 		return true;
@@ -111,7 +111,7 @@ namespace NetworkPlatform
 		);
 		if (result == SOCKET_ERROR)
 		{
-			Console << U"[NetworkPlatform] bind() failed: " << WSAGetLastError();
+			//Console << U"[NetworkPlatform] bind() failed: " << WSAGetLastError();
 			return false;
 		}
 		return true;
@@ -140,7 +140,7 @@ namespace NetworkPlatform
 			int error = WSAGetLastError();
 			if (error != WSAEWOULDBLOCK)
 			{
-				Console << U"[NetworkPlatform] sendto() failed: " << error;
+				//Console << U"[NetworkPlatform] sendto() failed: " << error;
 			}
 			return -1;
 		}
@@ -170,7 +170,7 @@ namespace NetworkPlatform
 			int error = WSAGetLastError();
 			if (error != WSAEWOULDBLOCK)
 			{
-				Console << U"[NetworkPlatform] recvfrom() failed: " << error;
+				//Console << U"[NetworkPlatform] recvfrom() failed: " << error;
 			}
 			recvResult.bytesReceived = -1;
 			return recvResult;
@@ -232,7 +232,7 @@ namespace NetworkPlatform
 
 		if (ret != NO_ERROR)
 		{
-			Console << U"[NetworkPlatform] GetAdaptersAddresses failed: " << ret;
+			//Console << U"[NetworkPlatform] GetAdaptersAddresses failed: " << ret;
 			return result;
 		}
 

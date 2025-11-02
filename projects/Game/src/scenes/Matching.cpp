@@ -85,7 +85,7 @@ void Matching::update()
 			{
 				// 最初に見つかったホストに接続
 				const auto& host = hosts[0];
-				Console << U"[クライアント] ホスト発見！自動接続開始: " << host.address.str();
+				//Console << U"[クライアント] ホスト発見！自動接続開始: " << host.address.str();
 				
 				if (m_multiplayer->connect(host.address, host.port))
 				{
@@ -115,11 +115,11 @@ void Matching::update()
 			bool connected = m_multiplayer->isConnected();
 			if (m_isHost)
 			{
-				Console << U"[ホスト] 接続待機中... isConnected=" << connected;
+				//Console << U"[ホスト] 接続待機中... isConnected=" << connected;
 			}
 			else
 			{
-				Console << U"[クライアント] 接続確認中... isConnected=" << connected;
+				//Console << U"[クライアント] 接続確認中... isConnected=" << connected;
 			}
 			lastCheckTime = Scene::Time();
 		}
@@ -129,12 +129,12 @@ void Matching::update()
 			// 接続成功、ゲームシーンへ
 			if (m_isHost)
 			{
-				Console << U"[ホスト] クライアントとの接続が確立されました。Game画面に遷移します。";
+				//Console << U"[ホスト] クライアントとの接続が確立されました。Game画面に遷移します。";
 			m_udpDiscovery->stopAdvertising();
 			}
 			else
 			{
-				Console << U"[クライアント] ホストとの接続が確立されました。Game画面に遷移します。";
+				//Console << U"[クライアント] ホストとの接続が確立されました。Game画面に遷移します。";
 			m_udpDiscovery->stopSearching();
 			}
 			
@@ -211,7 +211,7 @@ void Matching::update()
 				if (m_isHost)
 				{
 					// ホスト: 合言葉で部屋を立てる
-					Console << U"[ホスト] 合言葉設定: " << m_passphrase;
+					//Console << U"[ホスト] 合言葉設定: " << m_passphrase;
 					
 					// ローカルIPアドレスを取得
 					IPv4Address localIP = detectLocalIPForDisplay();
@@ -224,11 +224,11 @@ void Matching::update()
 					if (m_udpDiscovery->startAdvertising(m_passphrase, U"Re-ButtlerX", m_gamePort))
 					{
 						m_viewMode = ViewMode::Waiting;
-						Console << U"[ホスト] 接続待機中... IP: " << m_displayIP;
+						//Console << U"[ホスト] 接続待機中... IP: " << m_displayIP;
 					}
 					else
 					{
-						Console << U"[エラー] UDP広告の開始に失敗";
+						//Console << U"[エラー] UDP広告の開始に失敗";
 						m_multiplayer->disconnect();
 						m_viewMode = ViewMode::Menu;
 					}
@@ -236,16 +236,16 @@ void Matching::update()
 				else
 				{
 					// クライアント: 合言葉でブロードキャスト開始
-					Console << U"[クライアント] 合言葉入力: " << m_passphrase;
+					//Console << U"[クライアント] 合言葉入力: " << m_passphrase;
 					
 					if (m_udpDiscovery->startSearching(m_passphrase))
 					{
-						Console << U"[クライアント] ホスト検索中...";
+						//Console << U"[クライアント] ホスト検索中...";
 						// ViewModeはPassphraseInputのまま（自動接続処理が行われる）
 					}
 					else
 					{
-						Console << U"[エラー] UDP検索の開始に失敗";
+						//Console << U"[エラー] UDP検索の開始に失敗";
 						m_viewMode = ViewMode::Menu;
 					}
 				}
@@ -310,7 +310,7 @@ void Matching::update()
 		{
 			// 入力されたIPアドレスをパース
 			String ipText = m_ipInputState.text;
-			Console << U"[クライアント] 接続試行: " << ipText;
+			//Console << U"[クライアント] 接続試行: " << ipText;
 			
 			// IPアドレスをパース（xxx.xxx.xxx.xxx形式）
 			Array<String> parts = ipText.split(U'.');
@@ -325,28 +325,28 @@ void Matching::update()
 					
 					IPv4Address targetIP{ a, b, c, d };
 					
-					Console << U"[クライアント] ホストに接続中: " << targetIP.str();
+					//Console << U"[クライアント] ホストに接続中: " << targetIP.str();
 					
 					if (m_multiplayer->connect(targetIP, m_gamePort))
 					{
 						m_isHost = false;
 						m_viewMode = ViewMode::Waiting;
-						Console << U"[クライアント] 接続開始";
+						//Console << U"[クライアント] 接続開始";
 					}
 					else
 					{
-						Console << U"[クライアント] 接続失敗";
+						//Console << U"[クライアント] 接続失敗";
 					}
 				}
 				catch (const Error& e)
 				{
 					(void)e;  // 未使用変数（将来のログ出力用に保持）
-					Console << U"[クライアント] IPアドレスの解析に失敗: " << ipText;
+					//Console << U"[クライアント] IPアドレスの解析に失敗: " << ipText;
 				}
 			}
 			else
 			{
-				Console << U"[クライアント] 無効なIPアドレス形式: " << ipText;
+				//Console << U"[クライアント] 無効なIPアドレス形式: " << ipText;
 			}
 		}
 		
@@ -386,7 +386,7 @@ void Matching::update()
 		m_passphraseInputState.text = U"";
 		m_passphraseInputState.cursorPos = 0;
 		
-		Console << U"[ホスト] 合言葉入力画面へ";
+		//Console << U"[ホスト] 合言葉入力画面へ";
     }
     else if (m_joinButton.leftClicked())
     {
@@ -396,7 +396,7 @@ void Matching::update()
 		m_passphraseInputState.text = U"";
 		m_passphraseInputState.cursorPos = 0;
 		
-		Console << U"[ゲスト] 合言葉入力画面へ";
+		//Console << U"[ゲスト] 合言葉入力画面へ";
     }
     else if (m_backButton.leftClicked())
     {

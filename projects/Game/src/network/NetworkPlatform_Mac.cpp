@@ -31,7 +31,7 @@ namespace NetworkPlatform
 		int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
 		if (sock < 0)
 		{
-			Console << U"[NetworkPlatform] socket() failed: " << errno;
+			//Console << U"[NetworkPlatform] socket() failed: " << errno;
 			return INVALID_SOCKET_HANDLE;
 		}
 		return static_cast<SocketHandle>(sock);
@@ -50,7 +50,7 @@ namespace NetworkPlatform
 		int flags = ::fcntl(static_cast<int>(socket), F_GETFL, 0);
 		if (flags < 0)
 		{
-			Console << U"[NetworkPlatform] fcntl(F_GETFL) failed: " << errno;
+			//Console << U"[NetworkPlatform] fcntl(F_GETFL) failed: " << errno;
 			return false;
 		}
 
@@ -65,7 +65,7 @@ namespace NetworkPlatform
 
 		if (::fcntl(static_cast<int>(socket), F_SETFL, flags) < 0)
 		{
-			Console << U"[NetworkPlatform] fcntl(F_SETFL) failed: " << errno;
+			//Console << U"[NetworkPlatform] fcntl(F_SETFL) failed: " << errno;
 			return false;
 		}
 
@@ -77,7 +77,7 @@ namespace NetworkPlatform
 		int optval = enable ? 1 : 0;
 		if (::setsockopt(static_cast<int>(socket), SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 		{
-			Console << U"[NetworkPlatform] setsockopt(SO_REUSEADDR) failed: " << errno;
+			//Console << U"[NetworkPlatform] setsockopt(SO_REUSEADDR) failed: " << errno;
 			return false;
 		}
 
@@ -93,7 +93,7 @@ namespace NetworkPlatform
 		int optval = enable ? 1 : 0;
 		if (::setsockopt(static_cast<int>(socket), SOL_SOCKET, SO_BROADCAST, &optval, sizeof(optval)) < 0)
 		{
-			Console << U"[NetworkPlatform] setsockopt(SO_BROADCAST) failed: " << errno;
+			//Console << U"[NetworkPlatform] setsockopt(SO_BROADCAST) failed: " << errno;
 			return false;
 		}
 
@@ -109,7 +109,7 @@ namespace NetworkPlatform
 
 		if (::bind(static_cast<int>(socket), reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0)
 		{
-			Console << U"[NetworkPlatform] bind() failed: " << errno;
+			//Console << U"[NetworkPlatform] bind() failed: " << errno;
 			return false;
 		}
 
@@ -125,7 +125,7 @@ namespace NetworkPlatform
 		std::string addrStr = address.str().narrow();
 		if (::inet_pton(AF_INET, addrStr.c_str(), &dest.sin_addr) != 1)
 		{
-			Console << U"[NetworkPlatform] inet_pton() failed for " << address.str();
+			//Console << U"[NetworkPlatform] inet_pton() failed for " << address.str();
 			return -1;
 		}
 
@@ -143,7 +143,7 @@ namespace NetworkPlatform
 			int error = errno;
 			if (error != EWOULDBLOCK && error != EAGAIN)
 			{
-				Console << U"[NetworkPlatform] sendto() failed: " << error;
+				//Console << U"[NetworkPlatform] sendto() failed: " << error;
 			}
 			return -1;
 		}
@@ -172,7 +172,7 @@ namespace NetworkPlatform
 			int error = errno;
 			if (error != EWOULDBLOCK && error != EAGAIN)
 			{
-				Console << U"[NetworkPlatform] recvfrom() failed: " << error;
+				//Console << U"[NetworkPlatform] recvfrom() failed: " << error;
 			}
 			result.bytesReceived = -1;
 			return result;
@@ -211,7 +211,7 @@ namespace NetworkPlatform
 
 		if (::getifaddrs(&ifaddr) != 0)
 		{
-			Console << U"[NetworkPlatform] getifaddrs() failed: " << errno;
+			//Console << U"[NetworkPlatform] getifaddrs() failed: " << errno;
 			return result;
 		}
 

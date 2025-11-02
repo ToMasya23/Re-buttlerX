@@ -13,7 +13,7 @@
 void Main()
 {
 	// デバッグ用コンソールウィンドウを表示
-	Console.open();
+	////Console.open();
 	
 	// ESC でアプリ終了しないようにする（ポーズメニューで使うため）
 	System::SetTerminationTriggers(UserAction::CloseButtonClicked);

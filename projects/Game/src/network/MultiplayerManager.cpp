@@ -22,7 +22,7 @@ MultiplayerManager::MultiplayerManager()
 
 bool MultiplayerManager::startHost(uint16 port)
 {
-	Console << U"[MultiplayerManager] Starting host on port " << port;
+	//Console << U"[MultiplayerManager] Starting host on port " << port;
 
 	m_client.disconnect();
 	m_server.cancelAccept();
@@ -31,13 +31,13 @@ bool MultiplayerManager::startHost(uint16 port)
 	m_role = Role::Host;
 	m_server.startAccept(port);
 
-	Console << U"[Host] Waiting for client connection. Share your IP address with your opponent.";
+	//Console << U"[Host] Waiting for client connection. Share your IP address with your opponent.";
 	return true;
 }
 
 bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port, double timeoutSeconds)
 {
-	Console << U"[MultiplayerManager] Connecting to " << address.str() << U":" << port;
+	//Console << U"[MultiplayerManager] Connecting to " << address.str() << U":" << port;
 
 	m_client.disconnect();
 	m_server.cancelAccept();
@@ -45,7 +45,7 @@ bool MultiplayerManager::connect(const s3d::IPv4Address& address, uint16 port, d
 
 	if (!m_client.connect(address, port))
 	{
-		Console << U"[MultiplayerManager] connect() failed";
+		//Console << U"[MultiplayerManager] connect() failed";
 		m_role = Role::None;
 		return false;
 	}
@@ -114,7 +114,7 @@ void MultiplayerManager::update()
 					m_connectionTimestamp = Scene::Time();
 					m_lastHeartbeatTime = m_connectionTimestamp;
 					m_lastSentHeartbeatTime = m_connectionTimestamp;
-					Console << U"[Host] Client session accepted";
+					//Console << U"[Host] Client session accepted";
 					sendHandshake();
 				}
 			}
@@ -151,7 +151,7 @@ void MultiplayerManager::processIncomingData()
 
 			if (header.magic != net::PacketMagic)
 			{
-				Console << U"[MultiplayerManager] Invalid packet magic";
+				//Console << U"[MultiplayerManager] Invalid packet magic";
 				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
 				readFn(junk.data(), junk.size());
 				continue;
@@ -159,7 +159,7 @@ void MultiplayerManager::processIncomingData()
 
 			if (header.version != net::ProtocolVersion)
 			{
-				Console << U"[MultiplayerManager] Protocol version mismatch";
+				//Console << U"[MultiplayerManager] Protocol version mismatch";
 				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
 				readFn(junk.data(), junk.size());
 				disconnect();
@@ -168,7 +168,7 @@ void MultiplayerManager::processIncomingData()
 
 			if (header.payloadSize > net::MaxPayloadSize)
 			{
-				Console << U"[MultiplayerManager] Payload too large: " << header.payloadSize;
+				//Console << U"[MultiplayerManager] Payload too large: " << header.payloadSize;
 				s3d::Array<uint8> junk(sizeof(net::PacketHeader));
 				readFn(junk.data(), junk.size());
 				continue;
@@ -196,7 +196,7 @@ void MultiplayerManager::processIncomingData()
 				uint32 checksum = net::ComputeChecksum(payload.data(), header.payloadSize);
 				if (checksum != header.checksum)
 				{
-					Console << U"[MultiplayerManager] Packet checksum mismatch";
+					//Console << U"[MultiplayerManager] Packet checksum mismatch";
 					continue;
 				}
 			}
@@ -217,7 +217,7 @@ void MultiplayerManager::processIncomingData()
 
 			if (header.sequence != 0 && header.sequence <= m_lastReceivedSequence)
 			{
-				Console << U"[MultiplayerManager] Dropping out-of-order packet seq=" << header.sequence;
+				//Console << U"[MultiplayerManager] Dropping out-of-order packet seq=" << header.sequence;
 				continue;
 			}
 
@@ -225,7 +225,7 @@ void MultiplayerManager::processIncomingData()
 
 			if (m_connectionState != ConnectionState::Connected)
 			{
-				Console << U"[MultiplayerManager] Buffering skipped until handshake completes";
+				//Console << U"[MultiplayerManager] Buffering skipped until handshake completes";
 				continue;
 			}
 
@@ -282,7 +282,7 @@ void MultiplayerManager::handleHandshakePacket(const net::PacketHeader& header, 
 {
 	if (payload.size() != sizeof(net::HandshakeMessage))
 	{
-		Console << U"[MultiplayerManager] Invalid handshake payload";
+		//Console << U"[MultiplayerManager] Invalid handshake payload";
 		disconnect();
 		return;
 	}
@@ -295,13 +295,13 @@ void MultiplayerManager::handleHandshakePacket(const net::PacketHeader& header, 
 
 	if (m_role == Role::Host && handshake.role != net::ConnectionRole::Client)
 	{
-		Console << U"[Host] Unexpected handshake role";
+		//Console << U"[Host] Unexpected handshake role";
 		return;
 	}
 
 	if (m_role == Role::Client && handshake.role != net::ConnectionRole::Host)
 	{
-		Console << U"[Client] Unexpected handshake role";
+		//Console << U"[Client] Unexpected handshake role";
 		return;
 	}
 
@@ -317,7 +317,7 @@ void MultiplayerManager::handleHandshakePacket(const net::PacketHeader& header, 
 		m_connectionTimestamp = Scene::Time();
 		m_lastHeartbeatTime = m_connectionTimestamp;
 		m_lastSentHeartbeatTime = m_connectionTimestamp;
-		Console << U"[MultiplayerManager] Handshake complete";
+		//Console << U"[MultiplayerManager] Handshake complete";
 	}
 }
 
@@ -339,7 +339,7 @@ void MultiplayerManager::checkConnectionHealth()
 	{
 		if (m_sessionID && !m_server.hasSession(*m_sessionID))
 		{
-			Console << U"[MultiplayerManager] Host session closed";
+			//Console << U"[MultiplayerManager] Host session closed";
 			resetState();
 			return;
 		}
@@ -350,7 +350,7 @@ void MultiplayerManager::checkConnectionHealth()
 		{
 			if (m_clientConnectSucceeded)
 			{
-				Console << U"[MultiplayerManager] Client connection lost";
+				//Console << U"[MultiplayerManager] Client connection lost";
 			}
 			m_clientConnectSucceeded = false;
 		}
@@ -363,7 +363,7 @@ void MultiplayerManager::checkConnectionHealth()
 
 	if ((now - m_lastHeartbeatTime) > CONNECTION_TIMEOUT)
 	{
-		Console << U"[MultiplayerManager] Connection timeout";
+		//Console << U"[MultiplayerManager] Connection timeout";
 		disconnect();
 		return;
 	}
@@ -409,7 +409,7 @@ void MultiplayerManager::sendHandshake()
 	if (sendPacket(net::PacketType::Handshake, &handshake, static_cast<uint32>(sizeof(handshake)), true))
 	{
 		m_localHandshakeSent = true;
-		Console << U"[MultiplayerManager] Handshake sent";
+		//Console << U"[MultiplayerManager] Handshake sent";
 	}
 }
 
@@ -422,7 +422,7 @@ bool MultiplayerManager::sendPacket(net::PacketType type, const void* payload, u
 
 	if (payloadSize > net::MaxPayloadSize)
 	{
-		Console << U"[MultiplayerManager] Payload exceeds maximum size";
+		//Console << U"[MultiplayerManager] Payload exceeds maximum size";
 		return false;
 	}
 
@@ -458,7 +458,7 @@ bool MultiplayerManager::sendPacket(net::PacketType type, const void* payload, u
 
 	if (!success)
 	{
-		Console << U"[MultiplayerManager] Failed to send packet";
+		//Console << U"[MultiplayerManager] Failed to send packet";
 		return false;
 	}
 
