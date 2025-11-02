@@ -66,6 +66,7 @@ private:
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
 	bool m_isOnlineMode = false;
 	bool m_isHost = false;
+	bool m_battleEnded = false;
 
 	bool m_paused = false;
 	RenderTexture m_sceneRT;

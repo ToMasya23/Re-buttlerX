@@ -765,6 +765,8 @@ void Game::finishBattleIfNeeded()
 
 void Game::concludeBattle(net::BattleEndReason reason, bool hostWon)
 {
+	if (m_battleEnded) return;
+	m_battleEnded = true;
 	if (m_isOnlineMode && m_multiplayer && m_multiplayer->isConnected() && m_isHost)
 	{
 		net::BattleEndMessage msg{};
@@ -775,19 +777,20 @@ void Game::concludeBattle(net::BattleEndReason reason, bool hostWon)
 		m_multiplayer->send(msg);
 	}
 	getData().lastResult = hostWon == m_isHost;
-	if (m_multiplayer)
-	{
-		m_multiplayer->disconnect();
-	}
-	m_multiplayer.reset();
+	Console << U"LastResult: " << getData().lastResult;
+	// if (m_multiplayer)
+	// {
+	// 	m_multiplayer->disconnect();
+	// }
+	// m_multiplayer.reset();
 	if (getData().multiplayer)
 	{
 		getData().multiplayer.reset();
 	}
-
 	getData().lastMode = m_isOnlineMode ? GameData::GameMode::PvP : GameData::GameMode::PvE;
 	m_isOnlineMode = false;
 	m_isHost = false;
+
 	changeScene(State::Result);
 }
 
