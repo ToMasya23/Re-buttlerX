@@ -12,38 +12,38 @@ namespace UI {
 	inline constexpr s3d::ColorF Text{ 0.18,  0.12,  0.28 };
 }
 
-//——— 简易按钮（带可选左侧图标）——//
+//——— 簡易ボタン（オプションで左側アイコン付き）——//
 struct UIButton {
 	s3d::RoundRect rr;
 	s3d::String    label;
-	s3d::Texture   icon;                 // 可选：为空则不画图标
+	s3d::Texture   icon;                 // オプション：空の場合はアイコンを描画しない
 	bool           over = false;
 
-	// 视觉参数
+	// ビジュアルパラメータ
 	double radius = 20.0;
-	double padL = 18.0;               // 左内边距（图标距离按钮左侧）
-	double padV = 12.0;               // 上下内边距（决定图标目标高度）
-	double gap = 6.0;               // 图标与文字的间距
-	bool   centerCompensate = true;     // 是否让文字右移一点，抵消图标的视觉重量
+	double padL = 18.0;               // 左パディング（アイコンとボタン左端の距離）
+	double padV = 12.0;               // 上下パディング（アイコンの目標高さを決定）
+	double gap = 6.0;               // アイコンとテキストの間隔
+	bool   centerCompensate = true;     // テキストを右にずらし、アイコンの視覚的重みを相殺するか
 
 	UIButton() = default;
 
-	// 旧用法（无图标）仍可用
+	// 旧用法（アイコンなし）も引き続き使用可能
 	UIButton(const s3d::RectF& r, const s3d::String& text, double rads = 20.0)
 		: rr{ r, rads }, label{ text }, radius{ rads } {
 	}
 
-	// 新用法（带图标）
+	// 新用法（アイコン付き）
 	UIButton(const s3d::RectF& r, const s3d::String& text, const s3d::Texture& iconTex, double rads = 20.0)
 		: rr{ r, rads }, label{ text }, icon{ iconTex }, radius{ rads } {
 	}
 
-	// 运行时设置/更换图标
+	// 実行時にアイコンを設定/変更
 	void setIcon(const s3d::Texture& t) { icon = t; }
 
-	// 绘制与交互
+	// 描画と操作
 	void draw(const s3d::Font& font) const;
-	bool update(); // 返回是否被点击
+	bool update(); // クリックされたかどうかを返す
 };
 
 // ロビーシーン
@@ -60,10 +60,7 @@ public:
 	void draw() const override;
 
 private:
-
-	//RoundRect m_pvpButton{ Arg::center(400, 260), 300, 60, 8 };
-	//RoundRect m_pveButton{ Arg::center(400, 340), 300, 60, 8 };
-	//RoundRect m_exitButton{ Arg::center(400, 420), 300, 60, 8 };
+	s3d::Texture m_player{ U"assets/ui/characters/player.png" };
 
 	Transition m_pvpTr{ 0.4s, 0.2s };
 	Transition m_pveTr{ 0.4s, 0.2s };
@@ -91,30 +88,31 @@ private:
 
 	void recalcLayout(const s3d::Size& size);
 
-	// 字体
+	// フォント
 	s3d::Font mTitle{ 34, s3d::Typeface::Bold };
 	s3d::Font mUI{ 24 };
 	s3d::Font mSmall{ 18 };
 
-	// 布局
+	// レイアウト
 	s3d::RectF mOuter;
 	double mLeftX = 36.0;
 	double mTopY = 34.0;
 
-	double mRightW = 250.0;
+	double mRightW = 350.0;
 	double mRightX = 0.0;
 	s3d::RectF mRightTop;
 
 	UIButton mBtn1;
 	UIButton mBtn2;
 
-	s3d::Texture mIconPVP;       // 对人战
-	s3d::Texture mIconPVE;       // 练习战
+	s3d::Texture mIconPVP;       // 対人戦
+	s3d::Texture mIconPVE;       // 練習戦
 
 	s3d::Circle mAvatarL;
 	s3d::RectF  mCharBox;
 
 	s3d::RoundRect mPauseBtn{ s3d::RectF{ 0,0,90,64 }, 18 };
 };
+
 
 

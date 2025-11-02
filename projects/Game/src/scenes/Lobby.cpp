@@ -10,24 +10,24 @@ void UIButton::draw(const s3d::Font& font) const {
 	double textShiftX = 0.0;
 
 	if (icon) {
-		// 像素风更清晰
+		// ピクセル風でより鮮明に
 		const ScopedRenderStates2D _nn{ SamplerState::ClampNearest };
 
-		// 目标图标高度：按钮高度 - 上下内边距
+		// 目標アイコン高さ：ボタン高さ - 上下パディング
 		const double iconTargetH = rr.rect.h - padV * 2.0;
-		const double s = iconTargetH / icon.height();           // 等比缩放
-		const Vec2   pos{ rr.rect.x + padL, rr.rect.y + padV }; // 左上角
+		const double s = iconTargetH / icon.height();           // 等比拡大縮小
+		const Vec2   pos{ rr.rect.x + padL, rr.rect.y + padV }; // 左上隅
 
 		icon.scaled(s).draw(pos);
 
-		// 让文字右移一点（保持整体视觉居中）
+		// テキストを右に少しずらす（全体の視覚的中央を保つ）
 		if (centerCompensate) {
 			textShiftX = 0.5 * (padL + icon.width() * s + gap);
 		}
 	}
 
-	// 居中绘制标题；如果有图标，则整体右移一点点
-	font(label).drawAt(28, rr.center().movedBy(textShiftX, 0), UI::Text);
+	// 中央にタイトルを描画；アイコンがあれば全体を少し右にずらす
+	font(label).drawAt(36, rr.center().movedBy(textShiftX, 0), UI::Text);
 }
 
 bool UIButton::update() {
@@ -48,27 +48,29 @@ Lobby::Lobby(const InitData& init)
 }
 
 Lobby::~Lobby() {
-	// 离开 Lobby 停止 BGM（或在下个场景里直接播放新的也行）
+	// Lobby を離れる際に BGM を停止（または次のシーンで新しい BGM を直接再生してもよい）
 	AudioManager::instance().stopBGM();
 }
 
 void Lobby::recalcLayout(const Size& size) {
-	// 外框
+	using namespace s3d;
+	
+	// 外枠
 	mOuter = RectF{ 12, 12, size.x - 24.0, size.y - 24.0 };
 	mRightX = mOuter.x + mOuter.w - mRightW - 30.0;
 
-	// 右上资料条 + 按钮
-	mRightTop = RectF{ mRightX - 70, 25,  mRightW, 100 };
-	mBtn1 = UIButton{ RectF{ mRightX, 180, mRightW, 90 }, U"対人戦", mIconPVP, 20 };
-	mBtn2 = UIButton{ RectF{ mRightX, 300, mRightW, 90 }, U"練習戦", mIconPVE, 20 };
+	// 右上情報バー + ボタン
+	mRightTop = RectF{ mRightX - 90, 25,  mRightW, 100 };
+	mBtn1 = UIButton{ RectF{ mRightX, 180, mRightW, 110 }, U"対人戦", mIconPVP, 25 };
+	mBtn2 = UIButton{ RectF{ mRightX, 320, mRightW, 110 }, U"練習戦", mIconPVE, 25 };
 
-	// 左侧头像
+	// 左側アバター
 	mAvatarL = Circle{ mLeftX + 22, mTopY + 22, 18 };
 
-	// 角色占位框（移到中间，不挡左侧文字）
+	// キャラクタープレースホルダー枠（中央に移動し、左側のテキストを遮らない）
 	mCharBox = RectF{ 200, 260, 240, 280 };
 
-	// 右下暂停按钮
+	// 右下一時停止ボタン
 	mPauseBtn = RoundRect{ RectF{ mOuter.x + mOuter.w - 110, mOuter.y + mOuter.h - 80, 90, 64 }, 18 };
 }
 
@@ -124,26 +126,6 @@ void Lobby::update()
         return;
     }
 
-    /*m_pvpTr.update(m_pvpButton.mouseOver());
-    m_pveTr.update(m_pveButton.mouseOver());
-    m_exitTr.update(m_exitButton.mouseOver());
-
-    if (m_pvpButton.mouseOver() || m_pveButton.mouseOver())
-    {
-        Cursor::RequestStyle(CursorStyle::Hand);
-    }
-
-    if (m_pvpButton.leftClicked())
-    {
-        getData().lastMode = GameData::GameMode::PvP;
-        changeScene(State::Matching);
-    }
-    else if (m_pveButton.leftClicked())
-    {
-        getData().lastMode = GameData::GameMode::PvE;
-        changeScene(State::Game);
-    }*/
-
 	const bool b1 = mBtn1.update();
 	const bool b2 = mBtn2.update();
 
@@ -184,69 +166,55 @@ void Lobby::draw() const
         const_cast<Lobby*>(this)->m_blurTarget = RenderTexture{ sceneSize };
     }
 
-    {
-        //const ScopedRenderTarget2D rt{ m_sceneRT };
-        //m_sceneRT.clear(ColorF{ 0.25, 0.25, 0.35 });
-
-        /*FontAsset(U"TitleFont")(U"ロビー")
-            .drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.1, 0.15, 0.2 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 100, Vec2{ 400, 140 });
-
-        m_pvpButton.draw(ColorF{ 1.0, m_pvpTr.value() }).drawFrame(2);
-        m_pveButton.draw(ColorF{ 1.0, m_pveTr.value() }).drawFrame(2);
-
-        const Font& bold = FontAsset(U"Bold");
-        bold(U"PvP: マッチングへ").drawAt(28, m_pvpButton.center(), ColorF{ 0.1 });
-        bold(U"PvE: すぐ開始").drawAt(28, m_pveButton.center(), ColorF{ 0.1 });*/
-    }
-
 	{
+		using namespace s3d;
 		const ScopedRenderTarget2D rt{ m_sceneRT };
 		m_sceneRT.clear(UI::Bg);   // 背景色
 
-		// === ここから “新しいロビーUI” の描画（あなたが既に作った部分）===
-		// 全局外框
+		// === ここから "新しいロビーUI" の描画 ===
+		// 全体の外枠
 		mOuter.rounded(22).draw(UI::Panel);
 		mOuter.rounded(22).drawFrame(9, 0, UI::Frame);
 
-		// 左侧：头像 + 名称
-		mAvatarL.draw(ColorF{ 0.93, 0.95, 1.0 }).drawFrame(5, 0, UI::Frame);
-		mTitle(U"マーシャ").draw(mLeftX + 54, mTopY + 4, UI::Text);
-		mSmall(U"@Masya23_spl").draw(mLeftX + 54, mTopY + 38, UI::Text);
+		// 左側：アバター + 名前
+		//mAvatarL.draw(ColorF{ 0.93, 0.95, 1.0 }).drawFrame(5, 0, UI::Frame);
+		//mTitle(U"マーシャ").draw(mLeftX + 54, mTopY + 4, UI::Text);
+		//mSmall(U"@Masya23_spl").draw(mLeftX + 54, mTopY + 38, UI::Text);
 
-		// 左侧列表
-		const double listX = mLeftX + 8;
-		const double listY = 110.0;
-		const double lh = 34.0;
-		const Array<String> items{
-			U"プロフィール", U"ワザーらん", U"せつめい",
-			U"せってい", U"りれき", U"タイトル"
-		};
-		for (size_t i = 0; i < items.size(); ++i) {
-			const double y = listY + i * lh;
-			Circle{ listX + 8, y + 10, 5 }.draw(UI::Frame);
-			mUI(items[i]).draw(listX + 24, y, UI::Text);
-		}
+		// 左側リスト
+		//const double listX = mLeftX + 8;
+		//const double listY = 110.0;
+		//const double lh = 34.0;
+		//const Array<String> items{
+		//	U"プロフィール", U"ワザーらん", U"せつめい",
+		//	U"せってい", U"りれき", U"タイトル"
+		//};
+		//for (size_t i = 0; i < items.size(); ++i) {
+		//	const double y = listY + i * lh;
+		//	Circle{ listX + 8, y + 10, 5 }.draw(UI::Frame);
+		//	mUI(items[i]).draw(listX + 24, y, UI::Text);
+		//}
 
-		// 角色占位（贴图化时把下面两行替换为 Texture.fitted(...).drawAt(...)）
-		const RoundRect box{ mCharBox, 16 };
-		box.draw(ColorF{ 0.90, 0.94, 1.0 });
-		box.drawFrame(5, 0, UI::Frame);
-		Ellipse{ mCharBox.center().movedBy(0, mCharBox.h * 0.55), 90, 12 }
-		.draw(ColorF(0, 0, 0, 0.12));
+		// キャラクタープレースホルダー（テクスチャ化する際は以下を Texture.fitted(...).drawAt(...) に置き換える）
+		//s3d::RoundRect(mCharBox, 16).draw(ColorF{ 0.90, 0.94, 1.0 });
+		//s3d::RoundRect(mCharBox, 16).drawFrame(5, 0, UI::Frame);
+		//s3d::Ellipse(mCharBox.center().movedBy(0, mCharBox.h * 0.55), 90, 12).draw(ColorF(0, 0, 0, 0.12));
+		//m_player.fitted(mCharBox).drawAt(mCharBox.center());
+		m_player.resized(300, 600).drawAt(Vec2{ 200, 330 });
 
-		// 右上资料条
+		// 右上情報バー
 		const RoundRect bar{ mRightTop, 18 };
 		bar.draw(UI::Panel);
-		const Circle avaR{ bar.rect.x + 28, bar.rect.y + 50, 20 };
+		const Circle avaR{ bar.rect.x + 80, bar.rect.y + 55, 20 };
 		avaR.draw(ColorF{ 0.90, 0.96, 1.0 }).drawFrame(5, 0, UI::Frame);
-		mTitle(U"ネットエンジェル").draw(bar.rect.x + 60, bar.rect.y + 16, UI::Text);
-		mSmall(U"@ネットエンジ").draw(bar.rect.x + 60, bar.rect.y + 52, UI::Text);
+		mTitle(U"ネットエンジェル").draw(bar.rect.x + 110, bar.rect.y + 30, UI::Text);
+		mSmall(U"@ネットエンジ").draw(bar.rect.x + 110, bar.rect.y + 80, UI::Text);
 
-		// 右侧按钮
+		// 右側ボタン
 		mBtn1.draw(mTitle);
 		mBtn2.draw(mTitle);
 
-		// 右下暂停按钮（アイコンだけ描画。クリック判定は update 側）
+		// 右下一時停止ボタン（アイコンだけ描画。クリック判定は update 側）
 		mPauseBtn.draw(ColorF{ 0.96, 0.92, 1.0 }).drawFrame(5, 0, UI::Frame);
 		{
 			const Vec2 c = mPauseBtn.center();
