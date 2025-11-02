@@ -22,3 +22,12 @@ GameTemplate/
 
 - `GameTemplate/projects/Game/Game.xcodeproj` を開きます
 
+### 利用素材
+
+## クレジット
+
+本プロジェクトで使用している効果音・BGM素材は以下のサイトより提供されています。  
+いずれも商用・非商用を問わず無料で利用可能で、クレジット表記は任意です。
+- [効果音ラボ](https://soundeffect-lab.info/)  
+- [Tスタ](https://tnosite.com/)
+
