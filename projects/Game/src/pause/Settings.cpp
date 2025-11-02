@@ -1,4 +1,4 @@
-# include "Settings.hpp"
+﻿# include "Settings.hpp"
 
 SettingsScene::SettingsScene(const InitData& init)
 	: IScene{ init }
@@ -10,7 +10,7 @@ void SettingsScene::update()
 {
     if (KeyEscape.down())
     {
-        changeScene(State::Game);
+        changeScene(State::Lobby);
     }
 }
 

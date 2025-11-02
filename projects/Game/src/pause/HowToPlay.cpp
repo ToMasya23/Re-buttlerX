@@ -1,4 +1,4 @@
-# include "HowToPlay.hpp"
+﻿# include "HowToPlay.hpp"
 
 HowToPlayScene::HowToPlayScene(const InitData& init)
 	: IScene{ init }
@@ -10,7 +10,7 @@ void HowToPlayScene::update()
 {
     if (KeyEscape.down())
     {
-        changeScene(State::Game);
+        changeScene(State::Lobby);
     }
 }
 

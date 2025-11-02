@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <array>
 #include "../Common.hpp"
@@ -62,6 +62,10 @@ private:
 
 	s3d::Texture m_texPlayer;
 	s3d::Texture m_texEnemy;
+	s3d::Texture m_texAvatarL;     // 左下头像
+	s3d::Texture m_texDefendOn;    // 防御ON（或按下/防御中）
+	s3d::Texture m_texDefendOff;   // 防御OFF（常态）
+
 
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
 	bool m_isOnlineMode = false;
