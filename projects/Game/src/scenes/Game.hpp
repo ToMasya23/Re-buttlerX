@@ -15,6 +15,7 @@ class Game : public App::Scene
 {
 public:
 	Game(const InitData& init);
+	~Game();
 
 	void update() override;
 

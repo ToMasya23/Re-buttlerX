@@ -2,6 +2,7 @@
 #include "../game/BattleLogic.hpp"
 #include "../game/BattleUtils.hpp"
 #include "../tools/NineSlice.hpp"
+# include "../tools/AudioManager.hpp"
 
 namespace
 {
