@@ -1456,7 +1456,25 @@ void Game::draw() const
 					title = U"攻撃{}"_fmt(slot + 1);
 				}
 				const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
-				FontAsset(U"Bold")(title).drawAt(20, rr.center(), txt);
+				
+				// テキストの幅を確認し、コマンド枠の幅を超える場合はフォントサイズを10にする
+				const double padding = 8.0;
+				const double maxWidth = rr.rect.w - padding * 2;
+				const int32 normalFontSize = 20;
+				const int32 smallFontSize = 10;
+				
+				// 通常サイズでのテキスト幅を計算
+				const RectF textRegion = FontAsset(U"Bold")(title).region(normalFontSize);
+				
+				// テキストがコマンド枠の幅を超える場合は小さいフォントを使用
+				if (textRegion.w > maxWidth)
+				{
+					FontAsset(U"Bold")(title).drawAt(smallFontSize, rr.center(), txt);
+				}
+				else
+				{
+					FontAsset(U"Bold")(title).drawAt(normalFontSize, rr.center(), txt);
+				}
 			}
 		};
 
