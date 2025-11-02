@@ -45,6 +45,7 @@ namespace
         const s3d::Vec2 pos = dst.center() - size * 0.5;
         tex.scaled(s).draw(pos, tint);
     }
+
 }
 
 Game::Game(const InitData& init)
