@@ -1,9 +1,10 @@
-# include "Title.hpp"
+﻿# include "Title.hpp"
 
 Title::Title(const InitData& init)
 	: IScene{ init }
 {
-
+    // 画像の読み込み
+    m_titleTexture = Texture{ U"assets/ui/title/title_screen.png" };
 }
 
 void Title::update()
@@ -34,15 +35,24 @@ void Title::draw() const
 
     {
         const ScopedRenderTarget2D rt{ m_sceneRT };
-        m_sceneRT.clear(ColorF{ 0.2, 0.8, 0.4 });
+        m_sceneRT.clear(ColorF{ 0, 0, 0 });  // 背景色は黒にする
 
-        // タイトル描画
-        FontAsset(U"TitleFont")(U"GAME")
-            .drawAt(TextStyle::OutlineShadow(0.2, ColorF{ 0.2, 0.6, 0.2 }, Vec2{ 3, 3 }, ColorF{ 0.0, 0.5 }), 100, Vec2{ 400, 100 });
+        // 画像が読み込めている場合は描画
+        if (m_titleTexture)
+        {
+            // 画面サイズに合わせてスケーリング
+            const double scale = Min(
+                static_cast<double>(sceneSize.x) / m_titleTexture.width(),
+                static_cast<double>(sceneSize.y) / m_titleTexture.height()
+            );
+            
+            // 中央に描画
+            m_titleTexture.scaled(scale).drawAt(Scene::Center());
+        }
 
-        // 操作説明
+        // 操作説明（既存のコード）
         const Font& boldFont = FontAsset(U"Bold");
-        boldFont(U"ENTER / SPACE を押してスタート").drawAt(24, Vec2{ 400, 300 }, ColorF{ 0.9 });
+        boldFont(U"ENTER / SPACE を押してスタート").drawAt(24, Vec2{ 400, 450 }, ColorF{ 0.9 });
     }
 	m_sceneRT.draw();
 }

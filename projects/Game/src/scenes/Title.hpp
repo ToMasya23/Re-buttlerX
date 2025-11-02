@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 # include "../ui/PauseTheme.hpp"
 
@@ -31,6 +31,8 @@ private:
 	Transition m_effectTr{ 0.3s, 0.15s };
 	Transition m_titleTr{ 0.3s, 0.15s };
 	Transition m_exitPauseTr{ 0.3s, 0.15s };
+
+	Texture m_titleTexture;
 };
 
 

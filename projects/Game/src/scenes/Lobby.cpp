@@ -263,7 +263,6 @@ void Lobby::draw() const
         m_blurTarget.draw();
         Rect{ sceneSize }.draw(PauseTheme::Dimmer);
 		m_pauseMenu.draw();
-
     }
     else
     {

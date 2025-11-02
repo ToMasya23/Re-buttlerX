@@ -1,5 +1,5 @@
-# include "Matching.hpp"
-# include "../network/NetworkPlatform.hpp"
+#include "Matching.hpp"
+#include "../network/NetworkPlatform.hpp"
 
 Matching::Matching(const InitData& init)
 	: IScene{ init }
@@ -575,5 +575,4 @@ void Matching::draw() const
         m_sceneRT.draw();
     }
 }
-
 

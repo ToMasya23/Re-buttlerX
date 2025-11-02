@@ -37,6 +37,8 @@ struct GameData
     bool isHost = false;
 
 	State pauseReturnState;
+
+	bool lastResult;
 };
 
 using App = SceneManager<State, GameData>;
