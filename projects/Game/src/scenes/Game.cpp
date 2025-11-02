@@ -1,40 +1,53 @@
-﻿# include "Game.hpp"
+﻿// Header & helpers
+# include "Game.hpp"
 # include "../game/BattleLogic.hpp"
 # include "../game/BattleUtils.hpp"
 # include "../tools/NineSlice.hpp"
+# include "../ai/EnemyBot.hpp"
+
 namespace
 {
-	static constexpr int32 Damage1 = 10;
-	static constexpr int32 Damage2 = 20;
+    static constexpr int32 Damage1 = 10;
+    static constexpr int32 Damage2 = 20;
 
-	NineSliceSkin& ScreenFrame() {
-		static NineSliceSkin skin{
-			U"assets/ui/frames/battle_frame.png",
-			20, 20, 20, 20,
-			false
-		};
-		return skin;
-	}
+    // Enemy label positioning offsets
+    static constexpr double CastLabelOffsetY = -16.0;
+    static constexpr double DefendLabelOffsetX = -28.0;
+    static constexpr double DefendLabelOffsetY = -12.0;
 
-	NineSliceSkin& BaseFrame() {
-		static NineSliceSkin skin{
-			U"assets/ui/frames/battle_base.png",
-			20, 20, 20, 20,
-			false
-		};
-		return skin;
-	}
+    NineSliceSkin& ScreenFrame()
+    {
+        static NineSliceSkin skin{
+            U"assets/ui/frames/battle_frame.png",
+            20, 20, 20, 20,
+            false
+        };
+        return skin;
+    }
 
-	inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
-	{
-		const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
-		const double sx = dst.w / tex.width();
-		const double sy = dst.h / tex.height();
-		const double s = s3d::Min(sx, sy);
-		const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } *s;
-		const s3d::Vec2 pos = dst.center() - size * 0.5;
-		tex.scaled(s).draw(pos, tint);
-	}
+    NineSliceSkin& BaseFrame()
+    {
+        static NineSliceSkin skin{
+            U"assets/ui/frames/battle_base.png",
+            20, 20, 20, 20,
+            false
+        };
+        return skin;
+    }
+
+    inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
+    {
+        const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
+        const double texW = tex.width();
+        const double texH = tex.height();
+        const double sx = dst.w / texW;
+        const double sy = dst.h / texH;
+        const double s = s3d::Min(sx, sy);
+        const s3d::Vec2 size = s3d::Vec2{ texW, texH } * s;
+        const s3d::Vec2 pos = dst.center() - size * 0.5;
+        tex.scaled(s).draw(pos, tint);
+    }
+
 }
 
 Game::Game(const InitData& init)
@@ -47,21 +60,21 @@ Game::Game(const InitData& init)
         m_deck.refillRandom(4);
     }
 
-	// キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
-	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
-	m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
+    // キャラクタテクスチャの読み込み（ドットのにじみを避けるため Unmipped）
+    m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
+    m_texEnemy  = s3d::Texture{ U"assets/ui/characters/enemy.png",  s3d::TextureDesc::Unmipped };
 
-	AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
+    AudioManager::instance().startBGM(U"assets/BGM/menu.mp3", 0.7);
 }
 
 void Game::update()
 {
-	// Esc でポーズをトグル
-	if (KeyEscape.down())
-	{
-		m_paused = (not m_paused);
-		return;
-	}
+    // Esc でポーズをトグル
+    if (KeyEscape.down())
+    {
+        m_paused = (not m_paused);
+        return;
+    }
 
     // 使用後のクールダウン掃除
     m_deck.cleanupCooldowns();
@@ -92,7 +105,6 @@ void Game::update()
         default:
             break;
         }
-
         return;
     }
 
@@ -101,6 +113,7 @@ void Game::update()
     {
         BattleLogic::regenCost(m_state, Scene::DeltaTime());
     }
+    // 敵 AI は update 内でコスト回復も面倒を見る
 
     // 防御の継続時間チェック
     if (m_state.defending && (m_state.defendTimer.sF() >= BattleState::DefendDurationSec))
@@ -108,29 +121,29 @@ void Game::update()
         m_state.defending = false;
     }
 
-    // ---- メッセージ待機中は進行を止める ----
+    // ---- メッセージ待機中は進行を止める（AI 進行も止める） ----
     if (m_state.waitingForAcknowledge)
-	{
+    {
         if (BattleLogic::advanceInputDown())
-		{
+        {
             m_state.waitingForAcknowledge = false;
             if (m_state.nextAction == BattleState::NextAction::EnemyCounter)
-			{
-                BattleLogic::enemyCounter(m_state);
-			}
+            {
+                // 連続カウンターは廃止（AI が自律的に行動）
+            }
             else if (m_state.nextAction == BattleState::NextAction::FinishBattle)
-			{
-				finishBattleIfNeeded();
-			}
+            {
+                finishBattleIfNeeded();
+            }
             else if (m_state.nextAction == BattleState::NextAction::BackToSelection)
-			{
+            {
                 // そのまま選択に戻る（使用カードを1枚だけ置き換え）
                 m_deck.replaceUsedCard();
-			}
+            }
             m_state.nextAction = BattleState::NextAction::None;
-		}
-		return;
-	}
+        }
+        return;
+    }
 
     // 念のため：待機中でなく、置換待ちが残っていればここで実行
     if (m_deck.hasPendingReplacement())
@@ -138,17 +151,13 @@ void Game::update()
         m_deck.replaceUsedCard();
     }
 
-	// ---- カード補充（起動直後など空のとき） ----
+    // ---- カード補充（起動直後など空のとき） ----
     if (m_deck.current().isEmpty() && m_deck.hasCards())
-	{
+    {
         m_deck.refillRandom(4);
-	}
+    }
 
-	// 詠唱は使用しない（即時反映）
-
-    // インターバル再抽選の制御は未使用のため削除
-
-	// ---- PvE バトル更新 ----
+    // ---- PvE バトル更新 ----
     const Size sceneSize = Scene::Size();
 
     // 左上の攻撃ボタン群と逃げる（右端）
@@ -159,7 +168,6 @@ void Game::update()
     const RoundRect escapeBtn  = BattleLayout::EscapeButton(sceneSize);
 
     // 攻撃／逃げる／防御の入力
-    // 旧ホバー演出は未使用のため削除（escape のみ継続）
     const RectF playerPanel = BattleLayout::PlayerPanelRect(sceneSize);
     const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
     if (attackBtn1.mouseOver() || attackBtn2.mouseOver() || attackBtn3.mouseOver() || attackBtn4.mouseOver() || escapeBtn.mouseOver() || defendBtn.mouseOver())
@@ -167,7 +175,7 @@ void Game::update()
         Cursor::RequestStyle(CursorStyle::Hand);
     }
 
-    // 攻撃可否（防御中・待機中・インターバル中・コスト不足で不可）
+    // 攻撃可否（防御中・待機中・コスト不足で不可）
     if (attackBtn1.leftClicked())
     {
         const auto& cards = m_deck.current();
@@ -177,9 +185,7 @@ void Game::update()
             const CardSpec& c = cards[0];
             if (BattleLogic::canAttack(m_state) && BattleLogic::trySpendCost(m_state, c.cost))
             {
-                // 即時攻撃へ反映
                 BattleLogic::handlePlayerAttack(m_state, BattleUtils::slotDamage(0));
-                // 使用記録とクールダウン開始
                 m_deck.onUse(0);
             }
             else
@@ -299,6 +305,12 @@ void Game::update()
             m_state.nextAction = BattleState::NextAction::BackToSelection;
         }
     }
+
+    // ---- 敵 AI 更新（詠唱・防御・意思決定）----
+    if (!m_state.waitingForAcknowledge)
+    {
+        m_enemy.update(m_state, Scene::DeltaTime());
+    }
 }
 
 void Game::draw() const
@@ -345,6 +357,25 @@ void Game::draw() const
 			const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
 			drawFit(m_texPlayer, pRect, playerColor);
 			drawFit(m_texEnemy,  eRect,  enemyColor);
+
+            // 敵の状態表示（詠唱・防御） EnemyBot 状態を参照
+            {
+                const Vec2 infoPos = enemyPos + Vec2{ entitySize.x * 0.5, -12 };
+                if (m_enemy.isCasting())
+                {
+                    const double p = m_enemy.castProgress();
+                    const double w = entitySize.x;
+                    const RectF barBG{ enemyPos.x, enemyPos.y - 18, w, 6 };
+                    const RectF barFG{ barBG.x, barBG.y, w * p, 6 };
+                    barBG.draw(ColorF{ 0.2, 0.2, 0.3 });
+                    barFG.draw(ColorF{ 1.0, 0.5, 0.2 });
+                    FontAsset(U"Bold")(U"詠唱中: {}"_fmt(m_enemy.displayedLabel())).draw(14, infoPos.movedBy(-entitySize.x * 0.5, CastLabelOffsetY), ColorF{ 0.95 });
+                }
+                else if (m_enemy.isDefending())
+                {
+                    FontAsset(U"Bold")(U"防御中").draw(14, infoPos.movedBy(DefendLabelOffsetX, DefendLabelOffsetY), ColorF{ 0.95 });
+                }
+            }
 		}
 
 		const Font& bold = FontAsset(U"Bold");
@@ -493,4 +524,7 @@ void Game::finishBattleIfNeeded()
 		changeScene(State::Result);
 	}
 }
+
+
+// Enemy AI moved to EnemyBot
 

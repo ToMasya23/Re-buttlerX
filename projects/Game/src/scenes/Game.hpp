@@ -7,6 +7,7 @@
 # include "../game/FaceTextures.hpp"
 # include "../game/CardDeck.hpp"
 # include "../tools/AudioManager.hpp"
+# include "../ai/EnemyBot.hpp"
 
 // ゲームシーン（PvE バトル）
 class Game : public App::Scene
@@ -29,6 +30,12 @@ private:
 	s3d::Texture m_texPlayer;
 	s3d::Texture m_texEnemy;
 
+	// ---- 敵（PvE）用 簡易 AI 状態 ----
+	EnemyBot m_enemy;
+
+	// クレイジー時の挙動（100% 以上で “あべこべ表示” を発動）
+	bool enemyInCrazy() const { return (m_state.enemyCrazy >= 100); }
+
 	// ---- ポーズ用 ----
 	bool m_paused = false;
 	RenderTexture m_sceneRT;
@@ -42,6 +49,8 @@ private:
 
     // ユーティリティ
     void finishBattleIfNeeded();
+
+    // ---- 敵 AI は EnemyBot に委譲 ----
 };
 
 
