@@ -38,10 +38,12 @@ namespace
     inline void drawFit(const s3d::Texture& tex, const s3d::RectF& dst, const s3d::ColorF& tint = s3d::Palette::White)
     {
         const s3d::ScopedRenderStates2D _nn{ s3d::SamplerState::ClampNearest };
-        const double sx = dst.w / tex.width();
-        const double sy = dst.h / tex.height();
+        const double texW = tex.width();
+        const double texH = tex.height();
+        const double sx = dst.w / texW;
+        const double sy = dst.h / texH;
         const double s = s3d::Min(sx, sy);
-        const s3d::Vec2 size = s3d::Vec2{ tex.width(), tex.height() } * s;
+        const s3d::Vec2 size = s3d::Vec2{ texW, texH } * s;
         const s3d::Vec2 pos = dst.center() - size * 0.5;
         tex.scaled(s).draw(pos, tint);
     }
