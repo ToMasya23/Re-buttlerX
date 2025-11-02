@@ -78,7 +78,7 @@ void EnemyBot::update(BattleState& s, double dt)
     regenCostIfAllowed(s, dt);
 
     // Defend timeout
-    if (m_defending && (m_defendTimer.sF() >= BattleState::DefendDurationSec))
+    if (m_defending && (m_defendTimer.sF() >= EnemyDefendDuration))
     {
         m_defending = false;
     }
