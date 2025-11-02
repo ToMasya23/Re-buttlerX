@@ -1,4 +1,4 @@
-#include "Game.hpp"
+﻿#include "Game.hpp"
 #include "../game/BattleLogic.hpp"
 #include "../game/BattleUtils.hpp"
 #include "../tools/NineSlice.hpp"
@@ -494,7 +494,7 @@ private:
 				}
 				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
 				
-				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新
+				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新＆演出開始
 				if (msg->eventType == net::BattleEventType::ClientAttackDamage || 
 				    msg->eventType == net::BattleEventType::ClientAttackBlocked)
 				{
@@ -503,6 +503,27 @@ private:
 					{
 						m_game.m_deck.onUse(slotIndex);
 						m_game.replaceUsedCardIfNeeded();
+						
+						// カード飛翔演出を開始
+						if (slotIndex < static_cast<int>(m_game.m_deck.current().size()))
+						{
+							const CardSpec& visualCard = m_game.m_deck.getVisualCard(slotIndex);
+							String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
+							m_game.startPlayerProjectile(slotIndex, cardName);
+						}
+					}
+				}
+				// クライアント側でホストの攻撃イベントを受信した場合、敵側の演出開始
+				else if (msg->eventType == net::BattleEventType::HostAttackDamage || 
+				         msg->eventType == net::BattleEventType::HostAttackBlocked)
+				{
+					int32 slotIndex = msg->secondaryValue;
+					// 敵からの攻撃演出を開始
+					if (slotIndex >= 0 && slotIndex < static_cast<int>(m_game.m_deck.current().size()))
+					{
+						const CardSpec& visualCard = m_game.m_deck.getVisualCard(slotIndex);
+						String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
+						m_game.startEnemyProjectile(slotIndex, cardName);
 					}
 				}
 				// クライアント側で自分の防御イベントを受信した場合、防御状態を設定
@@ -613,6 +634,7 @@ void Game::update()
 	updateRemoteDefendState();
 	updateRemoteCost(dt);
 	updateLogs();
+	updateProjectiles();
 
 	m_deck.updateRefills();
 
@@ -1078,6 +1100,14 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
+	// カード飛翔演出を開始（有効なスロットの場合のみ）
+	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	{
+		const CardSpec& visualCard = m_deck.getVisualCard(slotIndex);
+		String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
+		startPlayerProjectile(slotIndex, cardName);
+	}
+
 	replaceUsedCardIfNeeded();
 	finishBattleIfNeeded();
 }
@@ -1173,6 +1203,14 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
 	}
 
+	// カード飛翔演出を開始（有効なスロットの場合のみ）
+	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	{
+		const CardSpec& visualCard = m_deck.getVisualCard(slotIndex);
+		String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
+		startEnemyProjectile(slotIndex, cardName);
+	}
+
 	replaceUsedCardIfNeeded();
 	finishBattleIfNeeded();
 }
@@ -1182,6 +1220,85 @@ void Game::replaceUsedCardIfNeeded()
 	if (m_deck.hasPendingReplacement())
 	{
 		m_deck.replaceUsedCard();
+	}
+}
+
+void Game::startPlayerProjectile(int32 slotIndex, const String& cardName)
+{
+	const Size sceneSize = Scene::Size();
+	
+	// 開始位置：攻撃ボタンの中心
+	const RoundRect attackBtn = BattleLayout::AttackOptionButton(sceneSize, slotIndex);
+	m_playerProjectile.startPos = attackBtn.center();
+	
+	// 目標位置：敵キャラクターの中心
+	const Vec2 enemyPos = BattleLayout::EnemyPos(sceneSize);
+	const Size entitySize = BattleLayout::EntitySize;
+	m_playerProjectile.targetPos = enemyPos + Vec2{ entitySize.x * 0.5, entitySize.y * 0.5 };
+	
+	m_playerProjectile.slotIndex = slotIndex;
+	m_playerProjectile.cardName = cardName;
+	m_playerProjectile.timer.restart();
+	m_playerProjectile.active = true;
+}
+
+void Game::startEnemyProjectile(int32 slotIndex, const String& cardName)
+{
+	const Size sceneSize = Scene::Size();
+	
+	// 開始位置：敵キャラクターの中心
+	const Vec2 enemyPos = BattleLayout::EnemyPos(sceneSize);
+	const Size entitySize = BattleLayout::EntitySize;
+	m_enemyProjectile.startPos = enemyPos + Vec2{ entitySize.x * 0.5, entitySize.y * 0.5 };
+	
+	// 目標位置：プレイヤーキャラクターの中心
+	const Vec2 playerPos = BattleLayout::PlayerPos(sceneSize);
+	m_enemyProjectile.targetPos = playerPos + Vec2{ entitySize.x * 0.5, entitySize.y * 0.5 };
+	
+	m_enemyProjectile.slotIndex = slotIndex;
+	m_enemyProjectile.cardName = cardName;
+	m_enemyProjectile.timer.restart();
+	m_enemyProjectile.active = true;
+}
+
+void Game::updateProjectiles()
+{
+	// プレイヤーの飛翔演出を更新
+	if (m_playerProjectile.active)
+	{
+		const double elapsed = m_playerProjectile.timer.sF();
+		
+		// 飛翔フェーズ完了時に点滅フェーズに移行
+		if (!m_playerProjectile.isBlinking && elapsed >= CardProjectile::FlightDuration)
+		{
+			m_playerProjectile.isBlinking = true;
+		}
+		
+		// 全体の演出時間が経過したら終了
+		if (elapsed >= CardProjectile::TotalDuration)
+		{
+			m_playerProjectile.active = false;
+			m_playerProjectile.isBlinking = false;
+		}
+	}
+	
+	// 敵の飛翔演出を更新
+	if (m_enemyProjectile.active)
+	{
+		const double elapsed = m_enemyProjectile.timer.sF();
+		
+		// 飛翔フェーズ完了時に点滅フェーズに移行
+		if (!m_enemyProjectile.isBlinking && elapsed >= CardProjectile::FlightDuration)
+		{
+			m_enemyProjectile.isBlinking = true;
+		}
+		
+		// 全体の演出時間が経過したら終了
+		if (elapsed >= CardProjectile::TotalDuration)
+		{
+			m_enemyProjectile.active = false;
+			m_enemyProjectile.isBlinking = false;
+		}
 	}
 }
 
@@ -1438,6 +1555,86 @@ void Game::draw() const
 			FontAsset(U"Bold")(U"詠唱中")
 				.draw(24, textPos, ColorF{ 1.0, 0.5, 0.5 });
 		}
+
+		// ===== カード飛翔演出の描画 =====
+		auto drawProjectile = [&](const CardProjectile& proj)
+		{
+			if (!proj.active) return;
+			
+			const double elapsed = proj.timer.sF();
+			
+			// 点滅フェーズの処理
+			if (proj.isBlinking)
+			{
+				// 点滅開始からの経過時間
+				const double blinkElapsed = elapsed - CardProjectile::FlightDuration;
+				const double blinkProgress = blinkElapsed / CardProjectile::BlinkDuration;
+				
+				// 点滅効果（10Hzで点滅）
+				const bool isVisible = (static_cast<int>(blinkElapsed * 10.0) % 2) == 0;
+				
+				if (isVisible)
+				{
+					// 目標位置に固定
+					const Vec2 currentPos = proj.targetPos;
+					
+					// カードのサイズ（点滅中は70%のサイズ）
+					const double cardSize = 80.0 * 0.7;
+					const RoundRect cardRect{ Arg::center = currentPos, cardSize, cardSize * 0.6, 8.0 };
+					
+					// 点滅時の色（白っぽく光る）
+					const double flashIntensity = 1.0 - blinkProgress * 0.3;
+					cardRect.draw(ColorF{ 1.0, 1.0, 0.9, flashIntensity }).drawFrame(2, ColorF{ 1.0, 0.8, 0.2, flashIntensity });
+					
+					// カード名を描画
+					const double fontSize = 14.0;
+					FontAsset(U"Bold")(proj.cardName).drawAt(fontSize, currentPos, ColorF{ 0.1, 0.1, 0.2, flashIntensity });
+				}
+			}
+			else
+			{
+				// 飛翔フェーズの処理
+				const double t = Clamp(elapsed / CardProjectile::FlightDuration, 0.0, 1.0);
+				
+				// イージング（加速→減速）
+				const double eased = EaseInOutQuad(t);
+				
+				// 現在の位置を計算
+				const Vec2 currentPos = proj.startPos.lerp(proj.targetPos, eased);
+				
+				// カードのサイズ（飛んでいる間は少し小さく）
+				const double cardSize = 80.0 * (1.0 - 0.3 * t);
+				const RoundRect cardRect{ Arg::center = currentPos, cardSize, cardSize * 0.6, 8.0 };
+				
+				// カードの背景を描画
+				cardRect.draw(ColorF{ 1.0, 1.0, 0.9, 0.95 - 0.3 * t }).drawFrame(2, ColorF{ 0.2, 0.2, 0.3 });
+				
+				// カード名を描画
+				const double fontSize = 16.0 * (1.0 - 0.2 * t);
+				FontAsset(U"Bold")(proj.cardName).drawAt(fontSize, currentPos, ColorF{ 0.1, 0.1, 0.2, 0.9 - 0.4 * t });
+				
+				// 軌跡エフェクト（残像）
+				for (int i = 1; i <= 3; ++i)
+				{
+					const double trailT = Clamp(t - i * 0.08, 0.0, 1.0);
+					if (trailT <= 0.0) continue;
+					
+					const double trailEased = EaseInOutQuad(trailT);
+					const Vec2 trailPos = proj.startPos.lerp(proj.targetPos, trailEased);
+					const double alpha = 0.3 * (1.0 - t) * (1.0 - i * 0.25);
+					const double trailSize = cardSize * (1.0 - i * 0.15);
+					
+					RoundRect{ Arg::center = trailPos, trailSize, trailSize * 0.6, 8.0 }
+						.draw(ColorF{ 1.0, 1.0, 0.9, alpha });
+				}
+			}
+		};
+		
+		// プレイヤーの飛翔演出を描画
+		drawProjectile(m_playerProjectile);
+		
+		// 敵の飛翔演出を描画
+		drawProjectile(m_enemyProjectile);
 
 	}
 

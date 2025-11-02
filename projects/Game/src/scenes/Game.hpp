@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <array>
 #include "../Common.hpp"
@@ -55,6 +55,21 @@ private:
 		double timestamp = 0.0;
 	};
 
+	// カード飛翔演出の構造体
+	struct CardProjectile
+	{
+		Vec2 startPos;
+		Vec2 targetPos;
+		int32 slotIndex = -1;
+		String cardName;
+		Stopwatch timer{ StartImmediately::No };
+		bool active = false;
+		bool isBlinking = false;  // 点滅状態
+		static constexpr double FlightDuration = 0.5; // 0.5秒で飛ぶ
+		static constexpr double BlinkDuration = 0.5;  // 0.5秒間点滅
+		static constexpr double TotalDuration = FlightDuration + BlinkDuration; // 合計1.0秒
+	};
+
 	BattleState m_state;
 	FaceTextures m_faces;
 	CardDeck m_deck;
@@ -78,6 +93,9 @@ private:
 	s3d::Array<LogEntry> m_eventLog;
 	static constexpr double LogDisplayDuration = 4.0;
 	static constexpr size_t MaxLogEntries = 6;
+
+	CardProjectile m_playerProjectile;
+	CardProjectile m_enemyProjectile;
 
 	double m_remoteCostValue = 100.0;
 	bool m_remoteDefending = false;
@@ -111,4 +129,8 @@ private:
 	void replaceUsedCardIfNeeded();
 	void updatePausedUI();
 	void performPvEEnemyCounter();
+
+	void startPlayerProjectile(int32 slotIndex, const String& cardName);
+	void startEnemyProjectile(int32 slotIndex, const String& cardName);
+	void updateProjectiles();
 };
