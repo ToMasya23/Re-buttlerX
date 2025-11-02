@@ -122,6 +122,7 @@
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\scenes\Title.cpp" />
     <ClCompile Include="src\scenes\Game.cpp" />
+    <ClCompile Include="src\ai\EnemyBot.cpp" />
     <ClCompile Include="src\scenes\Battle.cpp" />
     <ClCompile Include="src\scenes\Lobby.cpp" />
     <ClCompile Include="src\scenes\Matching.cpp" />
@@ -341,6 +342,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Common.hpp" />
+    <ClInclude Include="src\ai\EnemyBot.hpp" />
     <ClInclude Include="src\scenes\Game.hpp" />
     <ClInclude Include="src\scenes\Title.hpp" />
     <ClInclude Include="src\scenes\Menu.hpp" />
