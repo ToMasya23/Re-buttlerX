@@ -14,9 +14,6 @@ public:
 	void draw() const override;
 
 private:
-
-	// ---- ポーズ用 ----
-	bool m_paused = false;
 	RenderTexture m_sceneRT;
 	RenderTexture m_blurInternal;
 	RenderTexture m_blurTarget;

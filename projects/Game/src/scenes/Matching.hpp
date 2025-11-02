@@ -1,5 +1,6 @@
 # pragma once
 # include "../Common.hpp"
+#include "../ui/PauseMenu.hpp"
 # include "../ui/PauseTheme.hpp"
 # include "../network/MultiplayerManager.hpp"
 # include "../network/HostDiscovery.hpp"
@@ -60,6 +61,9 @@ private:
 	int32 m_selectedHostIndex = -1;
 
 	// ---- ポーズ用 ----
+	void updatePausedUI();
+	PauseMenu m_pauseMenu;
+
 	bool m_paused = false;
 	RenderTexture m_sceneRT;
 	RenderTexture m_blurInternal;

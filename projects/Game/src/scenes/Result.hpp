@@ -1,6 +1,7 @@
 # pragma once
 # include "../Common.hpp"
-# include "../ui/PauseTheme.hpp"
+#include "../ui/PauseMenu.hpp"
+#include "../ui/PauseTheme.hpp"
 
 // リザルトシーン
 class ResultScene : public App::Scene
@@ -22,6 +23,8 @@ private:
 	Transition m_lobbyTr{ 0.4s, 0.2s };
 
 	// ---- ポーズ用 ----
+	void updatePausedUI();
+	PauseMenu m_pauseMenu;
 	bool m_paused = false;
 	RenderTexture m_sceneRT;
 	RenderTexture m_blurInternal;

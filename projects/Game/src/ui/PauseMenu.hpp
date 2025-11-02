@@ -14,57 +14,50 @@ public:
 		Settings,
 		HowToPlay,
 		EffectViewer,
+		Lobby,
 		Title,
 		Exit,
 	};
 
+	void setActions(const Array<Action>& actions)
+	{
+		m_actions = actions;
+		m_tr.assign(actions.size(), Transition{0.3s, 0.15s});
+		rebuildLayout();
+	}
+
 	// ホバー・クリック更新。必要ならカーソル形状も要求する
 	Action update()
 	{
-		m_resumeTr.update(m_resumeButton.mouseOver());
-		m_settingsTr.update(m_settingsButton.mouseOver());
-		m_howToTr.update(m_howToButton.mouseOver());
-		m_effectTr.update(m_effectButton.mouseOver());
-		m_titleTr.update(m_titleButton.mouseOver());
-		m_exitTr.update(m_exitButton.mouseOver());
-
-		if (m_resumeButton.mouseOver() || m_settingsButton.mouseOver() || m_howToButton.mouseOver()
-			|| m_effectButton.mouseOver() || m_titleButton.mouseOver() || m_exitButton.mouseOver())
+		if (m_actions.isEmpty()) 
 		{
-			Cursor::RequestStyle(CursorStyle::Hand);
+			return Action::None;
 		}
 
-		if (m_resumeButton.leftClicked())
+		for (size_t i = 0; i < m_actions.size(); ++i) 
 		{
-			return Action::Resume;
-		}
-		else if (m_settingsButton.leftClicked())
-		{
-			return Action::Settings;
-		}
-		else if (m_howToButton.leftClicked())
-		{
-			return Action::HowToPlay;
-		}
-		else if (m_effectButton.leftClicked())
-		{
-			return Action::EffectViewer;
-		}
-		else if (m_titleButton.leftClicked())
-		{
-			return Action::Title;
-		}
-		else if (m_exitButton.leftClicked())
-		{
-			return Action::Exit;
-		}
+			const bool over = m_buttons[i].mouseOver();
+			m_tr[i].update(over);
+			if (over) 
+			{
+				Cursor::RequestStyle(CursorStyle::Hand);
+			}
 
+			if (m_buttons[i].leftClicked()) {
+				return m_actions[i];
+			}
+		}
 		return Action::None;
 	}
 
 	// パネルとボタン描画（背景のブラーや暗転は呼び出し側で実施）
 	void draw() const
 	{
+		if (m_actions.isEmpty()) 
+		{
+			return;
+		}
+
 		const Font& title = FontAsset(U"TitleFont");
 		const Font& bold = FontAsset(U"Bold");
 
@@ -73,36 +66,59 @@ public:
 
 		title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
 
-		m_resumeButton.draw(ColorF{ 1.0, m_resumeTr.value() }).drawFrame(2);
-		m_settingsButton.draw(ColorF{ 1.0, m_settingsTr.value() }).drawFrame(2);
-		m_howToButton.draw(ColorF{ 1.0, m_howToTr.value() }).drawFrame(2);
-		m_effectButton.draw(ColorF{ 1.0, m_effectTr.value() }).drawFrame(2);
-		m_titleButton.draw(ColorF{ 1.0, m_titleTr.value() }).drawFrame(2);
-		m_exitButton.draw(ColorF{ 1.0, m_exitTr.value() }).drawFrame(2);
-
-		bold(U"再開").drawAt(28, m_resumeButton.center(), ColorF{ 0.1 });
-		bold(U"設定").drawAt(28, m_settingsButton.center(), ColorF{ 0.1 });
-		bold(U"ゲーム説明").drawAt(28, m_howToButton.center(), ColorF{ 0.1 });
-		bold(U"効果確認").drawAt(28, m_effectButton.center(), ColorF{ 0.1 });
-		bold(U"タイトルへ").drawAt(28, m_titleButton.center(), ColorF{ 0.1 });
-		bold(U"EXIT").drawAt(28, m_exitButton.center(), ColorF{ 0.1 });
+		for (size_t i = 0; i < m_actions.size(); ++i)
+		{
+			const auto& rr = m_buttons[i];
+			const double a = m_tr[i].value();
+			rr.draw(ColorF{ 1.0, a}).drawFrame(2);
+			bold(getActionLabel(m_actions[i])).drawAt(28, rr.center().movedBy(0, 0), ColorF{ 0.1 });
+		}
 	}
 
 private:
+	inline String getActionLabel(Action action) const
+	{
+		switch(action)
+		{
+			case Action::Resume: return U"再開";
+			case Action::Settings: return U"設定";
+			case Action::HowToPlay: return U"ゲーム説明";
+			case Action::EffectViewer: return U"効果確認";
+			case Action::Lobby: return U"ロビーへ";
+			case Action::Title: return U"タイトルへ";
+			case Action::Exit: return U"ゲーム終了";
+		}
+	}
 
-	RoundRect m_resumeButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[0]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_settingsButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[1]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_howToButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[2]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_effectButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[3]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_titleButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[4]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
-	RoundRect m_exitButton{ Arg::center(PauseTheme::ButtonXs, PauseTheme::ButtonYs[5]), PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
 
-	Transition m_resumeTr{ 0.3s, 0.15s };
-	Transition m_settingsTr{ 0.3s, 0.15s };
-	Transition m_howToTr{ 0.3s, 0.15s };
-	Transition m_effectTr{ 0.3s, 0.15s };
-	Transition m_titleTr{ 0.3s, 0.15s };
-	Transition m_exitTr{ 0.3s, 0.15s };
+
+	void rebuildLayout()
+	{
+		constexpr double TitlePadTop = 96.0;
+		constexpr double ButtonPadBot = 24.0;
+		constexpr double ButtonGapY = 12.0;
+
+		const size_t n = m_actions.size();
+		const double buttonsTotalH = (n == 0) ? 0.0 : (n * PauseTheme::ButtonSize.y + (n - 1) * ButtonGapY);
+		double panelX = PauseTheme::PanelCenter.x - PauseTheme::PanelSize.x * 0.5;
+		double panelY = PauseTheme::PanelCenter.y - (TitlePadTop + buttonsTotalH + ButtonPadBot) * 0.5;
+
+		m_buttons.clear();
+		m_buttons.reserve(n);
+
+		double y = panelY + TitlePadTop;
+		const double btnX = panelX + PauseTheme::PanelSize.x * 0.5 - PauseTheme::ButtonSize.x * 0.5;
+		for (size_t i = 0; i < n; ++i)
+		{
+			const RoundRect rr{ btnX, y, PauseTheme::ButtonSize.x, PauseTheme::ButtonSize.y, PauseTheme::ButtonR };
+			m_buttons << rr;
+			y += PauseTheme::ButtonSize.y + ButtonGapY;
+		}
+	}
+
+	Array<Action> m_actions;
+	Array<RoundRect> m_buttons;
+	Array<Transition> m_tr;
 };
 
 

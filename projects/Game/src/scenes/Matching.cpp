@@ -27,6 +27,37 @@ IPv4Address Matching::detectLocalIPForDisplay()
 	return IPv4Address{ 127, 0, 0, 1 };
 }
 
+void Matching::updatePausedUI()
+{
+	m_pauseMenu.setActions({
+		PauseMenu::Action::Resume,
+		PauseMenu::Action::Lobby,
+		PauseMenu::Action::Title,
+		PauseMenu::Action::Exit,
+	});
+
+	const PauseMenu::Action action = m_pauseMenu.update();
+	getData().pauseReturnState = State::Lobby;
+	switch (action)
+	{
+	case PauseMenu::Action::Resume:
+		m_paused = false;
+		break;
+	
+	case PauseMenu::Action::Lobby:
+		changeScene(State::Lobby);
+		break;
+	case PauseMenu::Action::Title:
+		changeScene(State::Title);
+		break;
+	case PauseMenu::Action::Exit:
+		System::Exit();
+		break;
+	default:
+		break;
+	}
+}
+
 void Matching::update()
 {
     // Esc トグル
@@ -38,45 +69,7 @@ void Matching::update()
 
     if (m_paused)
     {
-        m_resumeTr.update(m_resumeButton.mouseOver());
-        m_settingsTr.update(m_settingsButton.mouseOver());
-        m_howToTr.update(m_howToButton.mouseOver());
-        m_effectTr.update(m_effectButton.mouseOver());
-        m_titleTr.update(m_titleButton.mouseOver());
-        m_exitPauseTr.update(m_exitPauseButton.mouseOver());
-
-        if (m_resumeButton.mouseOver() || m_settingsButton.mouseOver() || m_howToButton.mouseOver()
-            || m_effectButton.mouseOver() || m_titleButton.mouseOver() || m_exitPauseButton.mouseOver())
-        {
-            Cursor::RequestStyle(CursorStyle::Hand);
-        }
-
-        if (m_resumeButton.leftClicked())
-        {
-            m_paused = false;
-        }
-        else if (m_settingsButton.leftClicked())
-        {
-            changeScene(State::Settings);
-        }
-        else if (m_howToButton.leftClicked())
-        {
-            changeScene(State::HowToPlay);
-        }
-        else if (m_effectButton.leftClicked())
-        {
-            changeScene(State::EffectViewer);
-        }
-        else if (m_titleButton.leftClicked())
-        {
-            changeScene(State::Title);
-        }
-        else if (m_exitPauseButton.leftClicked())
-        {
-            System::Exit();
-        }
-
-        return;
+		updatePausedUI();
     }
 
 	// UDP Discovery を更新
@@ -575,27 +568,8 @@ void Matching::draw() const
         Shader::GaussianBlur(m_sceneRT, m_blurInternal, m_blurTarget, BoxFilterSize::BoxFilter9x9);
         m_blurTarget.draw();
         Rect{ sceneSize }.draw(PauseTheme::Dimmer);
-
-        const Font& title = FontAsset(U"TitleFont");
-        const Font& bold = FontAsset(U"Bold");
-        const s3d::RoundRect panel{ Arg::center(PauseTheme::PanelCenter), PauseTheme::PanelSize, PauseTheme::PanelR };
-        panel.draw(PauseTheme::PanelFill).drawFrame(3, 0, PauseTheme::PanelFrame);
-        title(U"PAUSE").drawAt(64, Vec2{ PauseTheme::TitlePos }, PauseTheme::TitleColor);
-
-        m_resumeButton.draw(ColorF{ 1.0, m_resumeTr.value() }).drawFrame(2);
-        m_settingsButton.draw(ColorF{ 1.0, m_settingsTr.value() }).drawFrame(2);
-        m_howToButton.draw(ColorF{ 1.0, m_howToTr.value() }).drawFrame(2);
-        m_effectButton.draw(ColorF{ 1.0, m_effectTr.value() }).drawFrame(2);
-        m_titleButton.draw(ColorF{ 1.0, m_titleTr.value() }).drawFrame(2);
-        m_exitPauseButton.draw(ColorF{ 1.0, m_exitPauseTr.value() }).drawFrame(2);
-
-        bold(U"再開").drawAt(28, m_resumeButton.center(), ColorF{ 0.1 });
-        bold(U"設定").drawAt(28, m_settingsButton.center(), ColorF{ 0.1 });
-        bold(U"ゲーム説明").drawAt(28, m_howToButton.center(), ColorF{ 0.1 });
-        bold(U"効果確認").drawAt(28, m_effectButton.center(), ColorF{ 0.1 });
-        bold(U"タイトルへ").drawAt(28, m_titleButton.center(), ColorF{ 0.1 });
-        bold(U"EXIT").drawAt(28, m_exitPauseButton.center(), ColorF{ 0.1 });
-    }
+		m_pauseMenu.draw();
+	}
     else
     {
         m_sceneRT.draw();

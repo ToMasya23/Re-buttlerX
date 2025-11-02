@@ -130,10 +130,8 @@
     </ClCompile>
     <ClCompile Include="src\scenes\Title.cpp" />
     <ClCompile Include="src\scenes\Game.cpp" />
-    <ClCompile Include="src\scenes\Battle.cpp" />
     <ClCompile Include="src\scenes\Lobby.cpp" />
     <ClCompile Include="src\scenes\Matching.cpp" />
-    <ClCompile Include="src\scenes\Menu.cpp" />
     <ClCompile Include="src\scenes\Result.cpp" />
     <ClCompile Include="src\pause\EffectViewer.cpp" />
     <ClCompile Include="src\pause\HowToPlay.cpp" />
@@ -446,4 +444,3 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
-

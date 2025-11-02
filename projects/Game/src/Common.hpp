@@ -9,8 +9,6 @@ class MultiplayerManager;
 enum class State
 {
 	Title,
-    Menu,
-    Battle,
     Game,
     Lobby,
     Matching,
@@ -23,9 +21,6 @@ enum class State
 // 共有するデータ
 struct GameData
 {
-	// 直前のゲームのスコア
-	int32 lastScore = 0;
-
     // ゲームモード
     enum class GameMode
     {
@@ -41,6 +36,7 @@ struct GameData
     std::shared_ptr<MultiplayerManager> multiplayer;
     bool isHost = false;
 
+	State pauseReturnState;
 };
 
 using App = SceneManager<State, GameData>;

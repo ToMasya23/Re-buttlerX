@@ -1,8 +1,6 @@
 ﻿# include <Siv3D.hpp> // Siv3D v0.6.16
 # include "Common.hpp"
 # include "Title.hpp"
-# include "Menu.hpp"
-# include "Battle.hpp"
 # include "scenes/Game.hpp"
 // 新規シーン
 # include "scenes/Lobby.hpp"
@@ -26,8 +24,6 @@ void Main()
 
 	App manager;
     manager.add<Title>(State::Title);
-    manager.add<Menu>(State::Menu);
-    manager.add<Battle>(State::Battle);
     manager.add<Game>(State::Game);
     manager.add<Lobby>(State::Lobby);
     manager.add<Matching>(State::Matching);

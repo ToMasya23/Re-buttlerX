@@ -774,9 +774,19 @@ void Game::concludeBattle(net::BattleEndReason reason, bool hostWon)
 		msg.reason = reason;
 		m_multiplayer->send(msg);
 	}
+	if (m_multiplayer)
+	{
+		m_multiplayer->disconnect();
+	}
+	m_multiplayer.reset();
+	if (getData().multiplayer)
+	{
+		getData().multiplayer.reset();
+	}
 
 	getData().lastMode = m_isOnlineMode ? GameData::GameMode::PvP : GameData::GameMode::PvE;
-	getData().lastScore = Max(0, m_state.playerHP);
+	m_isOnlineMode = false;
+	m_isHost = false;
 	changeScene(State::Result);
 }
 
@@ -1187,25 +1197,30 @@ void Game::replaceUsedCardIfNeeded()
 
 void Game::updatePausedUI()
 {
+	m_pauseMenu.setActions({
+		PauseMenu::Action::Resume,
+		PauseMenu::Action::Lobby,
+		PauseMenu::Action::Title,
+		PauseMenu::Action::Exit,
+	});
+
 	const PauseMenu::Action action = m_pauseMenu.update();
+	getData().pauseReturnState = State::Lobby;
 	switch (action)
 	{
 	case PauseMenu::Action::Resume:
 		m_paused = false;
 		break;
-	case PauseMenu::Action::Settings:
-		changeScene(State::Settings);
-		break;
-	case PauseMenu::Action::HowToPlay:
-		changeScene(State::HowToPlay);
-		break;
-	case PauseMenu::Action::EffectViewer:
-		changeScene(State::EffectViewer);
+	case PauseMenu::Action::Lobby:
+	    concludeBattle(net::BattleEndReason::Escape, !m_isHost);
+		changeScene(State::Lobby);
 		break;
 	case PauseMenu::Action::Title:
+	    concludeBattle(net::BattleEndReason::Escape, !m_isHost);
 		changeScene(State::Title);
 		break;
 	case PauseMenu::Action::Exit:
+	    concludeBattle(net::BattleEndReason::Escape, !m_isHost);
 		System::Exit();
 		break;
 	default:

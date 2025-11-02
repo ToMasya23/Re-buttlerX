@@ -10,7 +10,7 @@ void EffectViewerScene::update()
 {
     if (KeyEscape.down())
     {
-        changeScene(State::Game);
+        changeScene(getData().pauseReturnState);
     }
 }
 
