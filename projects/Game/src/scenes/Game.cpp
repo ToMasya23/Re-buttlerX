@@ -41,8 +41,6 @@ namespace
         tex.scaled(s).draw(pos, tint);
     }
 
-    // 敵がクレイジー状態の時の偽装ラベル候補
-    static const Array<String> FakeActionLabels{ U"防御", U"強化", U"回復", U"挑発" };
 }
 
 Game::Game(const InitData& init)
