@@ -576,6 +576,9 @@ Game::Game(const InitData& init)
 	m_remoteDefending = false;
 	m_remoteDefendEndTime = 0.0;
 
+	// オーラレンダラーを初期化
+	m_auraRenderer = std::make_unique<SimpleAuraRenderer>();
+
 	setupBattleLoop();
 	if (m_loop)
 	{
@@ -880,6 +883,10 @@ void Game::sendStateSync()
 		(m_state.enemyCastingSlot + 1)
 	);
 
+	// 属性IDを同期
+	msg.hostAttributeId = m_state.playerAttributeId;
+	msg.clientAttributeId = m_state.enemyAttributeId;
+
 	m_multiplayer->send(msg);
 }
 
@@ -972,6 +979,10 @@ void Game::applyStateSync(const net::StateSnapshotMessage& msg)
 	{
 		m_remoteCostValue = msg.hostCost;
 	}
+
+	// 属性同期（ホスト→敵、クライアント→自分として受信）
+	m_state.playerAttributeId = msg.clientAttributeId;
+	m_state.enemyAttributeId = msg.hostAttributeId;
 }
 
 void Game::broadcastEventToClient(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags)
@@ -1095,6 +1106,13 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 
 	m_deck.onUse(slotIndex);
 
+	// カード使用後に属性を更新
+	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	{
+		const CardSpec& card = m_deck.getActualCard(slotIndex);
+		m_state.playerAttributeId = card.attributeId;
+	}
+
 	// クレイジーモード中は実際のカード名を表示
 	if (m_deck.isCrazyMode() && slotIndex >= 0)
 	{
@@ -1203,6 +1221,13 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	if (finalDamage > 0)
 	{
 		BattleLogic::addCrazy(m_state, false, +20);
+	}
+
+	// 敵の属性を更新
+	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	{
+		const CardSpec& card = m_deck.getActualCard(slotIndex);
+		m_state.enemyAttributeId = card.attributeId;
 	}
 
 	// 防御成功時はAttackBlockedイベントに変更
@@ -1392,6 +1417,14 @@ void Game::draw() const
 		const ColorF enemyColor = hitEnemy ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
 		const RectF pRect{ playerPos, BattleLayout::EntitySize };
 		const RectF eRect{ enemyPos, BattleLayout::EntitySize };
+
+		// キャラクターの背後にオーラを描画
+		if (m_auraRenderer)
+		{
+			m_auraRenderer->draw(pRect, m_state.playerAttributeId);
+			m_auraRenderer->draw(eRect, m_state.enemyAttributeId);
+		}
+
 		drawFit(m_texPlayer, pRect, playerColor);
 		drawFit(m_texEnemy, eRect, enemyColor);
 

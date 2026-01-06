@@ -7,7 +7,7 @@
 namespace net
 {
 	constexpr uint32 PacketMagic = 0x52425858; // "RBXX"
-	constexpr uint16 ProtocolVersion = 0x0002;
+	constexpr uint16 ProtocolVersion = 0x0003;
 	constexpr uint32 MaxPayloadSize = 2048;
 
 	enum class PacketType : uint16
@@ -97,6 +97,8 @@ namespace net
 		uint8 isHostTurn = 0;
 		uint8 reserved = 0;
 		uint32 turnNumber = 0;
+		int32 hostAttributeId = 0;    // ホストの属性ID
+		int32 clientAttributeId = 0;  // クライアントの属性ID
 	};
 
 	struct BattleEventMessage

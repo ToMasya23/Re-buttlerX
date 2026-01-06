@@ -50,6 +50,10 @@ struct BattleState
     int32 enemyCastingSlot = -1;
     String playerCastingCardName;
     String enemyCastingCardName;
+
+    // ===== 属性システム =====
+    int32 playerAttributeId = 0;  // プレイヤーの現在属性（0=デフォルト）
+    int32 enemyAttributeId = 0;   // 敵の現在属性（0=デフォルト）
 };
 
 

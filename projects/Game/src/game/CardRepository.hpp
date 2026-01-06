@@ -65,6 +65,7 @@ namespace Cards
             if (jc[U"cost"].isNumber()) s.cost = jc[U"cost"].get<int32>();
             if (jc[U"delay"].isNumber()) s.delaySec = static_cast<double>(jc[U"delay"].get<int32>());
             if (jc[U"weight"].isNumber()) s.weight = jc[U"weight"].get<double>();
+            if (jc[U"attribute"].isNumber()) s.attributeId = jc[U"attribute"].get<int32>();
             loaded << s;
         }
         if (loaded.isEmpty())

@@ -8,6 +8,7 @@
 #include "../game/BattleState.hpp"
 #include "../game/FaceTextures.hpp"
 #include "../game/CardDeck.hpp"
+#include "../game/SimpleAuraRenderer.hpp"
 #include "../network/MultiplayerManager.hpp"
 #include "../network/BattleMessages.hpp"
 
@@ -102,6 +103,9 @@ private:
 	double m_remoteCostValue = 100.0;
 	bool m_remoteDefending = false;
 	double m_remoteDefendEndTime = 0.0;
+
+	// オーラ描画（差し替え可能）
+	std::unique_ptr<IAuraRenderer> m_auraRenderer;
 
 	void setupBattleLoop();
 
