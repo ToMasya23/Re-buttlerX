@@ -121,6 +121,14 @@ namespace net_detail
 		static constexpr bool AllowDuringHandshake = false;
 		static constexpr MultiplayerManager::Role SenderRole = MultiplayerManager::Role::Host;
 	};
+
+	template <>
+	struct MultiplayerMessageTraits<net::ClientHandSyncMessage>
+	{
+		static constexpr net::PacketType Type = net::PacketType::ClientHandSync;
+		static constexpr bool AllowDuringHandshake = false;
+		static constexpr MultiplayerManager::Role SenderRole = MultiplayerManager::Role::Client;
+	};
 }
 
 template <typename T>

@@ -2,7 +2,13 @@
 #include "../game/BattleLogic.hpp"
 #include "../game/BattleUtils.hpp"
 #include "../tools/NineSlice.hpp"
+
 # include "../tools/AudioManager.hpp"
+#include <fstream>
+
+namespace {
+	std::ofstream g_networkLog;
+}
 
 namespace
 {
@@ -172,9 +178,14 @@ public:
 		if (BattleLogic::isCastingComplete(g.m_state, false))
 		{
 			int32 slot = g.m_state.enemyCastingSlot;
-			const int32 damage = BattleUtils::slotDamage(slot, g.m_deck);
+			// クライアントのリクエスト受信時に実カードから計算済みのダメージを使用
+			// 未設定の場合のみホストのデッキでフォールバック計算する
+			const int32 damage = (m_enemyPendingDamage > 0)
+				? m_enemyPendingDamage
+				: BattleUtils::slotDamage(slot, g.m_deck);
 			g.handleEnemyAttack(slot, damage, net::BattleEventType::ClientAttackDamage, true);
 			BattleLogic::cancelCasting(g.m_state, false);
+			m_enemyPendingDamage = 0;
 			g.sendStateSync();
 		}
 
@@ -276,6 +287,32 @@ private:
 				}
 				handleClientRequest(*msg);
 			}
+			else if (type == net::PacketType::ClientHandSync)
+			{
+				auto msg = net.receive<net::ClientHandSyncMessage>();
+				if (!msg)
+				{
+					break;
+				}
+				// クライアントの手札テーブルを更新
+				for (int i = 0; i < 4; ++i)
+				{
+					m_game.m_clientActualHand[static_cast<size_t>(i)] = msg->actualIndices[i];
+					m_game.m_clientVisualHand[static_cast<size_t>(i)] = msg->visualIndices[i];
+				}
+				if (g_networkLog.is_open()) {
+					g_networkLog << "ClientHandSync received:"
+								<< " actual=[" << static_cast<int>(msg->actualIndices[0])
+								<< "," << static_cast<int>(msg->actualIndices[1])
+								<< "," << static_cast<int>(msg->actualIndices[2])
+								<< "," << static_cast<int>(msg->actualIndices[3]) << "]"
+								<< " visual=[" << static_cast<int>(msg->visualIndices[0])
+								<< "," << static_cast<int>(msg->visualIndices[1])
+								<< "," << static_cast<int>(msg->visualIndices[2])
+								<< "," << static_cast<int>(msg->visualIndices[3]) << "]"
+								<< std::endl;
+				}
+			}
 			else if (type == net::PacketType::BattleEvent || type == net::PacketType::StateSnapshot || type == net::PacketType::BattleEnd)
 			{
 				net.discardFrontPacket();
@@ -316,8 +353,42 @@ private:
 				return;
 			}
 
-			const CardSpec& visualCard = g.m_deck.getVisualCard(slotIndex);
-			const double cost = (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size())) ? visualCard.cost : 20.0;
+			// カード特定の優先順位:
+			// 1. ホストが管理するクライアント手札テーブル (m_clientActualHand / m_clientVisualHand)
+			// 2. メッセージに含まれるプールインデックス
+			// 3. ホスト自身のデッキ（最終フォールバック）
+			const CardSpec* clientVisualCard = nullptr;
+			const CardSpec* clientActualCard = nullptr;
+
+			if (slotIndex >= 0 && slotIndex < 4)
+			{
+				clientVisualCard = g.m_deck.getCardByPoolIndex(g.m_clientVisualHand[static_cast<size_t>(slotIndex)]);
+				clientActualCard = g.m_deck.getCardByPoolIndex(g.m_clientActualHand[static_cast<size_t>(slotIndex)]);
+			}
+			if (!clientVisualCard)
+			{
+				clientVisualCard = g.m_deck.getCardByPoolIndex(msg.visualCardPoolIndex);
+			}
+			if (!clientActualCard)
+			{
+				clientActualCard = g.m_deck.getCardByPoolIndex(msg.actualCardPoolIndex);
+			}
+			if (!clientVisualCard && slotIndex < static_cast<int>(cards.size()))
+			{
+				clientVisualCard = &g.m_deck.getVisualCard(slotIndex);
+			}
+			if (!clientActualCard && slotIndex < static_cast<int>(cards.size()))
+			{
+				clientActualCard = &g.m_deck.getActualCard(slotIndex);
+			}
+			if (!clientVisualCard)
+			{
+				g.handleActionRejected(3, net::BattleEventType::ClientActionRejected, true);
+				return;
+			}
+
+			// クライアントの視覚カードのコストで検証
+			const double cost = clientVisualCard->cost;
 			if (g.remoteAvailableCost() < cost)
 			{
 				g.handleActionRejected(0, net::BattleEventType::ClientActionRejected, true);
@@ -329,8 +400,15 @@ private:
 			// 詠唱開始（クライアント側）
 			if (slotIndex >= 0 && slotIndex < static_cast<int>(cards.size()))
 			{
-				double castTime = BattleLogic::calculateCastTime(visualCard.name);
-				BattleLogic::startCasting(g.m_state, false, slotIndex, visualCard.name, castTime);
+				// 視覚カードの名前で詠唱時間を計算（クライアントと一致させる）
+				double castTime = BattleLogic::calculateCastTime(clientVisualCard->name);
+				BattleLogic::startCasting(g.m_state, false, slotIndex, clientVisualCard->name, castTime);
+
+				// 詠唱完了時に使うダメージを実カードの名前から事前計算して保持
+				// （属性IDはhandleEnemyAttack内でキャスト完了時に更新する）
+				const CardSpec* damageCard = clientActualCard ? clientActualCard : clientVisualCard;
+				m_enemyPendingDamage = BattleUtils::calculateDamage(damageCard->name);
+
 				g.sendStateSync();
 			}
 			break;
@@ -362,6 +440,7 @@ private:
 
 	uint32 m_lastClientRequestId = 0;
 	double m_lastSyncSent = 0.0;
+	int32 m_enemyPendingDamage = 0; // 詠唱完了時に使うクライアント側の事前計算ダメージ
 };
 
 class Game::PvPClientLoop : public Game::BattleLoop
@@ -369,11 +448,20 @@ class Game::PvPClientLoop : public Game::BattleLoop
 public:
 	using Game::BattleLoop::BattleLoop;
 
+	void onEnter() override
+	{
+		// ゲーム開始時に初期手札をホストへ送信
+		sendHandSync();
+	}
+
 	void update(const BattleInput& input) override
 	{
 		Game& g = m_game;
 
 		processIncomingPackets();
+
+		// 手札の変化を検出してホストへ同期
+		checkAndSendHandSync();
 
 		// ===== クレイジーモード発動チェック（クライアント側） =====
 		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
@@ -462,6 +550,32 @@ private:
 		msg.requestId = m_nextRequestId++;
 		msg.action = action;
 		msg.slotIndex = static_cast<uint8>(slotIndex);
+
+		// 攻撃リクエスト時は選択カードの属性ID・プールインデックスを付与
+		if (slotIndex >= 0 && slotIndex < static_cast<int>(m_game.m_deck.current().size()))
+		{
+			const CardSpec& visualCard = m_game.m_deck.getVisualCard(slotIndex);
+			msg.cardAttributeId = static_cast<uint8>(visualCard.attributeId);
+
+			const int32 visIdx = m_game.m_deck.getVisualCardPoolIndex(slotIndex);
+			const int32 actIdx = m_game.m_deck.getActualCardPoolIndex(slotIndex);
+			msg.visualCardPoolIndex = (visIdx >= 0 && visIdx < 0xFF) ? static_cast<uint8>(visIdx) : 0xFF;
+			msg.actualCardPoolIndex = (actIdx >= 0 && actIdx < 0xFF) ? static_cast<uint8>(actIdx) : 0xFF;
+		}
+
+		// ファイルに通信動機を出力
+		if (g_networkLog.is_open()) {
+			g_networkLog << "sendRequest:"
+						<< " action=" << static_cast<int>(action)
+						<< " slotIndex=" << slotIndex
+						<< " cardAttributeId=" << static_cast<int>(msg.cardAttributeId)
+						<< " visualCardPoolIndex=" << static_cast<int>(msg.visualCardPoolIndex)
+						<< " actualCardPoolIndex=" << static_cast<int>(msg.actualCardPoolIndex)
+						<< " playerAttributeId=" << m_game.m_state.playerAttributeId
+						<< " enemyAttributeId=" << m_game.m_state.enemyAttributeId
+						<< std::endl;
+		}
+
 		m_game.m_multiplayer->send(msg);
 	}
 
@@ -496,15 +610,19 @@ private:
 				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
 				
 				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新＆演出開始
-				if (msg->eventType == net::BattleEventType::ClientAttackDamage || 
+				if (msg->eventType == net::BattleEventType::ClientAttackDamage ||
 				    msg->eventType == net::BattleEventType::ClientAttackBlocked)
 				{
 					int32 slotIndex = msg->secondaryValue;
 					if (slotIndex >= 0 && slotIndex < 4)
 					{
+						// 攻撃アニメーション開始
+						m_game.m_playerAttackAnimActive = true;
+						m_game.m_playerAttackAnimTimer.restart();
+
 						m_game.m_deck.onUse(slotIndex);
 						m_game.replaceUsedCardIfNeeded();
-						
+
 						// カード飛翔演出を開始
 						if (slotIndex < static_cast<int>(m_game.m_deck.current().size()))
 						{
@@ -515,10 +633,15 @@ private:
 					}
 				}
 				// クライアント側でホストの攻撃イベントを受信した場合、敵側の演出開始
-				else if (msg->eventType == net::BattleEventType::HostAttackDamage || 
+				else if (msg->eventType == net::BattleEventType::HostAttackDamage ||
 				         msg->eventType == net::BattleEventType::HostAttackBlocked)
 				{
 					int32 slotIndex = msg->secondaryValue;
+
+					// 敵攻撃アニメーション開始
+					m_game.m_enemyAttackAnimActive = true;
+					m_game.m_enemyAttackAnimTimer.restart();
+
 					// 敵からの攻撃演出を開始
 					if (slotIndex >= 0 && slotIndex < static_cast<int>(m_game.m_deck.current().size()))
 					{
@@ -550,11 +673,89 @@ private:
 		}
 	}
 
+	// 手札の変化を検出し、変化があればホストへ同期パケットを送る
+	void checkAndSendHandSync()
+	{
+		if (!m_game.m_multiplayer || m_game.m_multiplayer->getConnectionState() != MultiplayerManager::ConnectionState::Connected)
+		{
+			return;
+		}
+
+		const auto& cards = m_game.m_deck.current();
+		for (int i = 0; i < 4; ++i)
+		{
+			// リフィル待ちのスロットはカードが確定していないのでスキップ
+			if (m_game.m_deck.isSlotRefilling(i)) continue;
+
+			uint8 currentIdx = 0xFF;
+			if (i < static_cast<int>(cards.size()))
+			{
+				const int32 actIdx = m_game.m_deck.getActualCardPoolIndex(i);
+				currentIdx = (actIdx >= 0 && actIdx < 0xFF) ? static_cast<uint8>(actIdx) : 0xFF;
+			}
+
+			if (currentIdx != m_lastSentActualHand[static_cast<size_t>(i)])
+			{
+				sendHandSync();
+				return;
+			}
+		}
+	}
+
+	// 現在の手札状態をホストへ送信し、送信済みテーブルを更新する
+	void sendHandSync()
+	{
+		if (!m_game.m_multiplayer || m_game.m_multiplayer->getConnectionState() != MultiplayerManager::ConnectionState::Connected)
+		{
+			return;
+		}
+
+		net::ClientHandSyncMessage msg{};
+		const auto& cards = m_game.m_deck.current();
+		for (int i = 0; i < 4; ++i)
+		{
+			if (i < static_cast<int>(cards.size()))
+			{
+				const int32 actIdx = m_game.m_deck.getActualCardPoolIndex(i);
+				const int32 visIdx = m_game.m_deck.getVisualCardPoolIndex(i);
+				msg.actualIndices[i] = (actIdx >= 0 && actIdx < 0xFF) ? static_cast<uint8>(actIdx) : 0xFF;
+				msg.visualIndices[i] = (visIdx >= 0 && visIdx < 0xFF) ? static_cast<uint8>(visIdx) : 0xFF;
+			}
+		}
+
+		m_game.m_multiplayer->send(msg);
+
+		// 送信済みテーブルを更新
+		for (int i = 0; i < 4; ++i)
+		{
+			m_lastSentActualHand[static_cast<size_t>(i)] = msg.actualIndices[i];
+		}
+
+		if (g_networkLog.is_open()) {
+			g_networkLog << "ClientHandSync sent:"
+						<< " actual=[" << static_cast<int>(msg.actualIndices[0])
+						<< "," << static_cast<int>(msg.actualIndices[1])
+						<< "," << static_cast<int>(msg.actualIndices[2])
+						<< "," << static_cast<int>(msg.actualIndices[3]) << "]"
+						<< " visual=[" << static_cast<int>(msg.visualIndices[0])
+						<< "," << static_cast<int>(msg.visualIndices[1])
+						<< "," << static_cast<int>(msg.visualIndices[2])
+						<< "," << static_cast<int>(msg.visualIndices[3]) << "]"
+						<< std::endl;
+		}
+	}
+
 	uint32 m_nextRequestId = 1;
+	// 直近にホストへ送信した手札の実カードインデックス (変化検出用, 0xFF=未送信)
+	std::array<uint8, 4> m_lastSentActualHand{0xFF, 0xFF, 0xFF, 0xFF};
 };
 Game::Game(const InitData& init)
 	: IScene{ init }
 {
+	// --- ログファイルを開く ---
+	if (!g_networkLog.is_open()) {
+		g_networkLog.open("network_log.txt", std::ios::app);
+	}
 	m_faces.load();
 	m_deck.loadAll();
 	if (m_deck.hasCards())
@@ -562,8 +763,40 @@ Game::Game(const InitData& init)
 		m_deck.refillRandom(4);
 	}
 
-	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player.png", s3d::TextureDesc::Unmipped };
-	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy.png", s3d::TextureDesc::Unmipped };
+	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player/idle/player.png", s3d::TextureDesc::Unmipped };
+	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy/idle/enemy.png", s3d::TextureDesc::Unmipped };
+
+	// 攻撃アニメーション用テクスチャ（属性別）
+	m_texPlayerAttackQuantity1 = s3d::Texture{ U"assets/ui/characters/player/attack/quantity/player_quantity_1.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerAttackQuantity2 = s3d::Texture{ U"assets/ui/characters/player/attack/quantity/player_quantity_2.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerAttackQuality1 = s3d::Texture{ U"assets/ui/characters/player/attack/quality/player_quality_1.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerAttackQuality2 = s3d::Texture{ U"assets/ui/characters/player/attack/quality/player_quality_2.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerAttackCounter1 = s3d::Texture{ U"assets/ui/characters/player/attack/counter/player_counter_1.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerAttackCounter2 = s3d::Texture{ U"assets/ui/characters/player/attack/counter/player_counter_2.png", s3d::TextureDesc::Unmipped };
+
+	// 敵攻撃アニメーション用テクスチャ（属性別）
+	m_texEnemyAttackQuantity1 = s3d::Texture{ U"assets/ui/characters/enemy/attack/quantity/enemy_quantity_1.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyAttackQuantity2 = s3d::Texture{ U"assets/ui/characters/enemy/attack/quantity/enemy_quantity_2.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyAttackQuality1 = s3d::Texture{ U"assets/ui/characters/enemy/attack/quality/enemy_quality_1.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyAttackQuality2 = s3d::Texture{ U"assets/ui/characters/enemy/attack/quality/enemy_quality_2.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyAttackCounter1 = s3d::Texture{ U"assets/ui/characters/enemy/attack/counter/enemy_counter_1.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyAttackCounter2 = s3d::Texture{ U"assets/ui/characters/enemy/attack/counter/enemy_counter_2.png", s3d::TextureDesc::Unmipped };
+
+	// ▼ 追加: バトル背景を読み込み
+	m_texBattleBackground = s3d::Texture{ U"assets/ui/background/background_battle.png",
+										  s3d::TextureDesc::Unmipped };
+	// ▲ 追加ここまで
+
+	// ▼ 追加: コマンド枠画像の読み込み (パスは適宜調整してください)
+	m_texCommandQuantity = s3d::Texture{ U"assets/ui/command/command_quantity.png" };
+	m_texCommandQuality  = s3d::Texture{ U"assets/ui/command/command_quality.png" };
+	m_texCommandCounter  = s3d::Texture{ U"assets/ui/command/command_counter.png" };
+	// ▲ 追加ここまで
+
+	// ▼ 追加: 防御ボタンON/OFF画像の読み込み
+	m_texGuardOn = s3d::Texture{ U"assets/ui/command/guard_on.png" };
+	m_texGuardOff = s3d::Texture{ U"assets/ui/command/guard_off.png" };
+	// ▲ 追加ここまで
 
 	if (getData().multiplayer)
 	{
@@ -589,6 +822,10 @@ Game::Game(const InitData& init)
 
 Game::~Game()
 {
+	// --- ログファイルを閉じる ---
+	if (g_networkLog.is_open()) {
+		g_networkLog.close();
+	}
 	AudioManager::instance().stopBGM();
 }
 
@@ -645,6 +882,16 @@ void Game::update()
 	updateRemoteCost(dt);
 	updateLogs();
 	updateProjectiles();
+
+	// 攻撃アニメーションの終了判定
+	if (m_playerAttackAnimActive && m_playerAttackAnimTimer.sF() >= AttackAnimTotalDuration)
+	{
+		m_playerAttackAnimActive = false;
+	}
+	if (m_enemyAttackAnimActive && m_enemyAttackAnimTimer.sF() >= AttackAnimTotalDuration)
+	{
+		m_enemyAttackAnimActive = false;
+	}
 
 	m_deck.updateRefills();
 
@@ -879,13 +1126,22 @@ void Game::sendStateSync()
 
 	// 詠唱スロット番号をreservedフィールドにエンコード
 	msg.reserved = static_cast<uint8>(
-		((m_state.playerCastingSlot + 1) << 4) | 
+		((m_state.playerCastingSlot + 1) << 4) |
 		(m_state.enemyCastingSlot + 1)
 	);
 
 	// 属性IDを同期
 	msg.hostAttributeId = m_state.playerAttributeId;
 	msg.clientAttributeId = m_state.enemyAttributeId;
+
+	if (g_networkLog.is_open()) {
+		g_networkLog << "sendStateSync:"
+					<< " hostAttributeId=" << msg.hostAttributeId
+					<< " clientAttributeId=" << msg.clientAttributeId
+					<< " playerAttributeId(state)=" << m_state.playerAttributeId
+					<< " enemyAttributeId(state)=" << m_state.enemyAttributeId
+					<< std::endl;
+	}
 
 	m_multiplayer->send(msg);
 }
@@ -981,8 +1237,11 @@ void Game::applyStateSync(const net::StateSnapshotMessage& msg)
 	}
 
 	// 属性同期（ホスト→敵、クライアント→自分として受信）
-	m_state.playerAttributeId = msg.clientAttributeId;
-	m_state.enemyAttributeId = msg.hostAttributeId;
+	// BattleEvent で既に設定済みの場合は上書きしない（StateSync が古い値で戻すのを防ぐ）
+	if (msg.clientAttributeId != 0 || m_state.playerAttributeId == 0)
+		m_state.playerAttributeId = msg.clientAttributeId;
+	if (msg.hostAttributeId != 0 || m_state.enemyAttributeId == 0)
+		m_state.enemyAttributeId = msg.hostAttributeId;
 }
 
 void Game::broadcastEventToClient(net::BattleEventType type, int32 primaryValue, int32 secondaryValue, uint32 flags)
@@ -1028,6 +1287,23 @@ void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 s
 			break;
 		}
 	}
+	else
+	{
+		// PvE: Client* イベントは敵側の行動なので localPerspective = false
+		switch (type)
+		{
+		case net::BattleEventType::ClientAttackDamage:
+		case net::BattleEventType::ClientAttackBlocked:
+		case net::BattleEventType::ClientActionRejected:
+		case net::BattleEventType::ClientDefend:
+		case net::BattleEventType::ClientEscape:
+			localPerspective = false;
+			break;
+		default:
+			localPerspective = true;
+			break;
+		}
+	}
 
 	const String message = renderBattleEvent(type, primaryValue, secondaryValue, flags, localPerspective);
 	if (!message.isEmpty())
@@ -1043,6 +1319,25 @@ void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 s
 	else if (flags & net::EventFlagHitPlayer)
 	{
 		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+	}
+
+	// 攻撃イベントに埋め込まれた属性IDを復元して状態に反映
+	switch (type)
+	{
+	case net::BattleEventType::HostAttackDamage:
+	case net::BattleEventType::HostAttackBlocked:
+	case net::BattleEventType::ClientAttackDamage:
+	case net::BattleEventType::ClientAttackBlocked:
+	{
+		const int32 attrId = net::unpackAttributeId(flags);
+		if (localPerspective)
+			m_state.playerAttributeId = attrId;
+		else
+			m_state.enemyAttributeId = attrId;
+		break;
+	}
+	default:
+		break;
 	}
 }
 
@@ -1085,7 +1380,7 @@ String Game::renderBattleEvent(net::BattleEventType type, int32 primaryValue, in
 	case net::BattleEventType::ClientEscape:
 		return localPerspective ? U"逃走を試みた！" : U"相手が逃げ出そうとしている";
 	case net::BattleEventType::TurnChanged:
-		return U"";
+		return U""; // ターン変更メッセージは非表示
 	default:
 		return U"";
 	}
@@ -1093,6 +1388,10 @@ String Game::renderBattleEvent(net::BattleEventType type, int32 primaryValue, in
 
 void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
+	// 攻撃アニメーション開始
+	m_playerAttackAnimActive = true;
+	m_playerAttackAnimTimer.restart();
+
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
 	const int32 finalDamage = m_remoteDefending ? 0 : damage;
 	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
@@ -1130,7 +1429,8 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 		}
 	}
 
-	const uint32 flags = net::EventFlagHitEnemy;
+	// 攻撃発動時の属性IDをフラグにパックして送受信双方が同期できるようにする
+	const uint32 flags = net::packAttributeId(net::EventFlagHitEnemy, m_state.playerAttributeId);
 	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
@@ -1213,6 +1513,10 @@ void Game::handleEscape(net::BattleEventType eventType, bool broadcastToClient)
 
 void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType eventType, bool broadcastToClient)
 {
+	// 敵攻撃アニメーション開始
+	m_enemyAttackAnimActive = true;
+	m_enemyAttackAnimTimer.restart();
+
 	const int32 finalDamage = m_state.defending ? 0 : damage;
 	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
@@ -1223,11 +1527,18 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 		BattleLogic::addCrazy(m_state, false, +20);
 	}
 
-	// 敵の属性を更新
-	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	// 敵の属性を更新（ホスト側のクライアント手札テーブルを優先、なければホストデッキでフォールバック）
+	if (slotIndex >= 0 && slotIndex < 4)
 	{
-		const CardSpec& card = m_deck.getActualCard(slotIndex);
-		m_state.enemyAttributeId = card.attributeId;
+		const CardSpec* clientCard = m_deck.getCardByPoolIndex(m_clientActualHand[static_cast<size_t>(slotIndex)]);
+		if (clientCard)
+		{
+			m_state.enemyAttributeId = clientCard->attributeId;
+		}
+		else if (slotIndex < static_cast<int>(m_deck.current().size()))
+		{
+			m_state.enemyAttributeId = m_deck.getActualCard(slotIndex).attributeId;
+		}
 	}
 
 	// 防御成功時はAttackBlockedイベントに変更
@@ -1240,7 +1551,8 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 		}
 	}
 
-	const uint32 flags = net::EventFlagHitPlayer;
+	// 攻撃発動時の属性IDをフラグにパックして送受信双方が同期できるようにする
+	const uint32 flags = net::packAttributeId(net::EventFlagHitPlayer, m_state.enemyAttributeId);
 	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
 	if (broadcastToClient)
@@ -1250,10 +1562,31 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	}
 
 	// カード飛翔演出を開始（有効なスロットの場合のみ）
-	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+	// 優先順位: 詠唱時に保存したカード名 > クライアント視覚手札テーブル > ホストデッキ
+	if (slotIndex >= 0)
 	{
-		const CardSpec& visualCard = m_deck.getVisualCard(slotIndex);
-		String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
+		String cardName;
+		if (!m_state.enemyCastingCardName.isEmpty())
+		{
+			// 詠唱開始時に clientVisualCard->name が保存されている
+			cardName = m_state.enemyCastingCardName;
+		}
+		else if (slotIndex < 4)
+		{
+			const CardSpec* clientCard = m_deck.getCardByPoolIndex(m_clientVisualHand[static_cast<size_t>(slotIndex)]);
+			if (clientCard && !clientCard->name.isEmpty())
+			{
+				cardName = clientCard->name;
+			}
+		}
+		if (cardName.isEmpty() && slotIndex < static_cast<int>(m_deck.current().size()))
+		{
+			cardName = m_deck.getVisualCard(slotIndex).name;
+		}
+		if (cardName.isEmpty())
+		{
+			cardName = U"攻撃{}"_fmt(slotIndex + 1);
+		}
 		startEnemyProjectile(slotIndex, cardName);
 	}
 
@@ -1407,7 +1740,20 @@ void Game::draw() const
 
 	{
 		const ScopedRenderTarget2D rt{ m_sceneRT };
-		m_sceneRT.clear(ColorF{ 1.0 });
+
+		// ▼ ここで背景を先に描く
+		if (m_texBattleBackground)
+		{
+			m_texBattleBackground
+				.resized(sceneSize)
+				.draw(0, 0);
+		}
+		else
+		{
+			// 背景がない場合のフォールバック（従来の白塗り）
+			m_sceneRT.clear(ColorF{ 1.0 });
+		}
+		// ▲ 背景ここまで
 
 		const double t = m_state.hitTimer.sF();
 		const bool hitPlayer = (m_state.hitTarget == BattleState::HitTarget::Player) && (t < BattleState::HitDuration);
@@ -1425,8 +1771,68 @@ void Game::draw() const
 			m_auraRenderer->draw(eRect, m_state.enemyAttributeId);
 		}
 
-		drawFit(m_texPlayer, pRect, playerColor);
-		drawFit(m_texEnemy, eRect, enemyColor);
+		// プレイヤーの攻撃アニメーション中はフレームに応じたテクスチャを使用
+		if (m_playerAttackAnimActive)
+		{
+			// 属性IDに応じてテクスチャペアを選択
+			const s3d::Texture* pAtk1 = &m_texPlayerAttackQuantity1;
+			const s3d::Texture* pAtk2 = &m_texPlayerAttackQuantity2;
+			if (m_state.playerAttributeId == 2)
+			{
+				pAtk1 = &m_texPlayerAttackQuality1;
+				pAtk2 = &m_texPlayerAttackQuality2;
+			}
+			else if (m_state.playerAttributeId == 3)
+			{
+				pAtk1 = &m_texPlayerAttackCounter1;
+				pAtk2 = &m_texPlayerAttackCounter2;
+			}
+
+			const double elapsed = m_playerAttackAnimTimer.sF();
+			if (elapsed < AttackAnimFrame1Duration)
+			{
+				drawFit(*pAtk1, pRect, playerColor);
+			}
+			else
+			{
+				drawFit(*pAtk2, pRect, playerColor);
+			}
+		}
+		else
+		{
+			drawFit(m_texPlayer, pRect, playerColor);
+		}
+		// 敵の攻撃アニメーション中はフレームに応じたテクスチャを使用
+		if (m_enemyAttackAnimActive)
+		{
+			// 属性IDに応じてテクスチャペアを選択
+			const s3d::Texture* pEAtk1 = &m_texEnemyAttackQuantity1;
+			const s3d::Texture* pEAtk2 = &m_texEnemyAttackQuantity2;
+			if (m_state.enemyAttributeId == 2)
+			{
+				pEAtk1 = &m_texEnemyAttackQuality1;
+				pEAtk2 = &m_texEnemyAttackQuality2;
+			}
+			else if (m_state.enemyAttributeId == 3)
+			{
+				pEAtk1 = &m_texEnemyAttackCounter1;
+				pEAtk2 = &m_texEnemyAttackCounter2;
+			}
+
+			const double elapsed = m_enemyAttackAnimTimer.sF();
+			if (elapsed < AttackAnimFrame1Duration)
+			{
+				drawFit(*pEAtk1, eRect, enemyColor);
+			}
+			else
+			{
+				drawFit(*pEAtk2, eRect, enemyColor);
+			}
+		}
+		else
+		{
+			drawFit(m_texEnemy, eRect, enemyColor);
+		}
 
 		const Font& bold = FontAsset(U"Bold");
 
@@ -1472,6 +1878,7 @@ void Game::draw() const
 		const ColorF actionBg{ 1.0 };
 		const bool disabledAll = m_state.defending;
 
+		// drawSlot ラムダ式を修正
 		auto drawSlot = [&](const RoundRect& rr, int slot)
 		{
 			const bool isRefilling = m_deck.isSlotRefilling(slot);
@@ -1502,24 +1909,56 @@ void Game::draw() const
 				const bool hasCurrent = (slot < static_cast<int>(m_deck.current().size()));
 				const bool hasLast = (!hasCurrent && (slot < static_cast<int>(m_deck.lastDisplayed().size())));
 				const bool hasAny = hasCurrent || hasLast;
-				const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
-				rr.draw(base).drawFrame(2);
-				String title;
-				if (hasAny)
+				
+				// ▼ 修正: 属性に応じて背景画像を描画
+				const CardSpec* pCard = nullptr;
+				if (hasCurrent) pCard = &m_deck.getVisualCard(slot);
+				else if (hasLast) pCard = &m_deck.lastDisplayed()[slot];
+
+				bool textureDrawn = false;
+				if (pCard)
 				{
-					const CardSpec& c = hasCurrent ? m_deck.getVisualCard(slot) : m_deck.lastDisplayed()[slot];
-					title = (c.name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : c.name);
+					// 属性IDに応じたテクスチャを選択
+					const Texture* pTex = nullptr;
+					if (pCard->attributeId == 1) pTex = &m_texCommandQuantity;
+					else if (pCard->attributeId == 2) pTex = &m_texCommandQuality;
+					else if (pCard->attributeId == 3) pTex = &m_texCommandCounter;
+
+					// テクスチャがあり、ロード成功していれば描画
+					if (pTex && *pTex)
+					{
+						// ボタン枠に合わせて拡縮描画
+						pTex->resized(rr.rect.size).draw(rr.rect.pos);
+						textureDrawn = true;
+					}
+				}
+
+				// テクスチャを描画しなかった場合（デフォルトまたは画像未ロード）は従来通り単色描画
+				if (!textureDrawn)
+				{
+					const ColorF base = disabledAll || !hasAny ? ColorF{ 0.95 } : actionBg;
+					rr.draw(base).drawFrame(2);
+				}
+				// ▲ 修正ここまで
+
+				String title;
+				if (pCard)
+				{
+					title = (pCard->name.isEmpty() ? U"攻撃{}"_fmt(slot + 1) : pCard->name);
 				}
 				else
 				{
 					title = U"攻撃{}"_fmt(slot + 1);
 				}
-				const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 0.1 };
+				
+				// テキストの色：背景画像がある場合は白っぽく、なければ従来通り
+				// 必要に応じて調整してください
+				const ColorF txt = disabledAll || !hasAny ? ColorF{ 0.5 } : ColorF{ 1 };
 				
 				// テキストの幅を確認し、コマンド枠の幅を超える場合はフォントサイズを10にする
 				const double padding = 8.0;
-				const double maxWidth = rr.rect.w - padding * 2;
-				const int32 normalFontSize = 20;
+				const double maxWidth = rr.rect.w - padding * 2 - 10;
+				const int32 normalFontSize = 17;
 				const int32 smallFontSize = 10;
 				
 				// 通常サイズでのテキスト幅を計算
@@ -1563,10 +2002,33 @@ void Game::draw() const
 		const RoundRect panelRR{ playerPanel, BattleLayout::PlayerPanelR };
 		panelRR.draw(ColorF{ 1.0, 0.95 });
 		BaseFrame().draw(panelRR.rect);
-		BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
+
+		// プレイヤーアイコン枠
+		//BattleLayout::PlayerIconRect(playerPanel).rounded(6).draw(ColorF{ 0.3, 0.7, 0.9 });
+
+		// 防御ボタン
 		const RoundRect defendBtn = BattleLayout::DefendButtonRect(playerPanel);
-		defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
-		FontAsset(U"Bold")(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+
+		// 防御状態（ON/OFF）の選択
+		// m_state.defending が true のとき ON 画像、それ以外は OFF 画像
+		const bool isDefendingNow = m_state.defending;
+
+		// ここで guardTex を宣言して、ON/OFF どちらかを選ぶ
+		const s3d::Texture& guardTex = isDefendingNow ? m_texGuardOn : m_texGuardOff;
+
+		// テクスチャがロードできていれば画像を描画、なければ従来の矩形＋文字
+		if (guardTex)
+		{
+			guardTex
+				.resized(defendBtn.rect.size)
+				.draw(defendBtn.rect.pos);
+		}
+		else
+		{
+			// フォールバック描画（従来通り）
+			defendBtn.draw(ColorF{ 1.0 }).drawFrame(2);
+			FontAsset(U"Bold")(U"防御").drawAt(24, defendBtn.center(), ColorF{ 0.1 });
+		}
 
 		if (!m_eventLog.isEmpty())
 		{

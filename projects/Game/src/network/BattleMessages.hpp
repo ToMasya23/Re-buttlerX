@@ -18,6 +18,7 @@ namespace net
 		StateSnapshot  = 0x0101,
 		BattleEvent    = 0x0102,
 		BattleEnd      = 0x0103,
+		ClientHandSync = 0x0104, // クライアント手札同期（Client→Host）
 	};
 
 	enum class ConnectionRole : uint8
@@ -55,6 +56,22 @@ namespace net
 	constexpr uint32 EventFlagHitPlayer = 1u << 1;
 	constexpr uint32 EventFlagHitEnemy = 1u << 2;
 
+	// flags のビット 8-15 に属性ID (0-255) を格納するユーティリティ
+	// 攻撃イベント (HostAttackDamage 等) で使用し、受信側が属性IDを復元する
+	constexpr uint32 EventFlagAttributeIdShift = 8;
+	constexpr uint32 EventFlagAttributeIdMask  = 0xFFu << EventFlagAttributeIdShift;
+
+	inline uint32 packAttributeId(uint32 flags, int32 attrId)
+	{
+		return (flags & ~EventFlagAttributeIdMask)
+			| ((static_cast<uint32>(attrId) & 0xFF) << EventFlagAttributeIdShift);
+	}
+
+	inline int32 unpackAttributeId(uint32 flags)
+	{
+		return static_cast<int32>((flags >> EventFlagAttributeIdShift) & 0xFF);
+	}
+
 	struct PacketHeader
 	{
 		uint32 magic = PacketMagic;
@@ -79,7 +96,9 @@ namespace net
 		uint32 requestId = 0;
 		ActionType action = ActionType::Attack1;
 		uint8 slotIndex = 0;
-		uint8 reserved[3]{};
+		uint8 cardAttributeId = 0;        // 視覚カードの属性ID (0=デフォルト, 1=量, 2=質, 3=反撃)
+		uint8 visualCardPoolIndex = 0xFF; // 視覚カードのプールインデックス (0xFF=無効)
+		uint8 actualCardPoolIndex = 0xFF; // 実際カードのプールインデックス (0xFF=無効)
 	};
 
 	struct StateSnapshotMessage
@@ -116,6 +135,14 @@ namespace net
 		uint8 hostWon = 0;
 		BattleEndReason reason = BattleEndReason::HPZero;
 		uint8 reserved[2]{};
+	};
+
+	// クライアントの手札状態をホストへ通知するメッセージ (Client→Host)
+	// 各スロットの実カード・視覚カードのプールインデックス (0xFF = 空/無効)
+	struct ClientHandSyncMessage
+	{
+		uint8 actualIndices[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+		uint8 visualIndices[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 	};
 
 	inline uint32 ComputeChecksum(const void* data, size_t size)

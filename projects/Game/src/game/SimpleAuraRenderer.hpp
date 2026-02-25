@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 #include "AuraRenderer.hpp"
 
 // シンプルな円形オーラの実装
@@ -17,7 +17,7 @@ public:
         const Vec2 center = characterRect.center();
         
         // キャラクターサイズに基づいてオーラサイズを計算
-        const double baseRadius = Max(characterRect.w, characterRect.h) * 0.55;
+        const double baseRadius = Max(characterRect.w, characterRect.h) * 0.17;
         
         // 脈動エフェクト
         const double pulse = 1.0 + 0.05 * Sin(Scene::Time() * 3.0);

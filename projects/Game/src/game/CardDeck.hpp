@@ -311,10 +311,41 @@ public:
         }
         return m_currentCards[index];
     }
-    
+
     const CardSpec& getActualCard(size_t index) const
     {
         return m_currentCards[index];
+    }
+
+    // 指定スロットの視覚カードが m_allCards 上で何番目かを返す (-1=見つからない)
+    int32 getVisualCardPoolIndex(int32 slot) const
+    {
+        if (slot < 0 || slot >= static_cast<int32>(m_currentCards.size())) return -1;
+        const String& id = getVisualCard(static_cast<size_t>(slot)).id;
+        for (int32 i = 0; i < static_cast<int32>(m_allCards.size()); ++i)
+        {
+            if (m_allCards[i].id == id) return i;
+        }
+        return -1;
+    }
+
+    // 指定スロットの実カードが m_allCards 上で何番目かを返す (-1=見つからない)
+    int32 getActualCardPoolIndex(int32 slot) const
+    {
+        if (slot < 0 || slot >= static_cast<int32>(m_currentCards.size())) return -1;
+        const String& id = m_currentCards[slot].id;
+        for (int32 i = 0; i < static_cast<int32>(m_allCards.size()); ++i)
+        {
+            if (m_allCards[i].id == id) return i;
+        }
+        return -1;
+    }
+
+    // プールインデックスからカードを取得 (0xFF や範囲外は nullptr)
+    const CardSpec* getCardByPoolIndex(uint8 index) const
+    {
+        if (index == 0xFF || static_cast<size_t>(index) >= m_allCards.size()) return nullptr;
+        return &m_allCards[static_cast<size_t>(index)];
     }
 
 private:

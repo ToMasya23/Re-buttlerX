@@ -1,4 +1,4 @@
-# pragma once
+﻿# pragma once
 # include "../Common.hpp"
 
 // カード定義

@@ -3,13 +3,22 @@
 
 namespace BattleLayout
 {
-	// エンティティ（キャラ）サイズ
-	inline constexpr Size EntitySize{ 100, 200 };
+	// キャラ表示倍率
+	inline constexpr double EntityScale = 2.0; // 80% など好きな倍率に
+
+	// 元のエンティティ（キャラ）サイズ（テクスチャ前提サイズ）
+	inline constexpr Size BaseEntitySize{ 200, 400 };
+
+	// 実際に使うエンティティサイズ
+	inline constexpr Size EntitySize{
+		static_cast<int32>(BaseEntitySize.x * EntityScale),
+		static_cast<int32>(BaseEntitySize.y * EntityScale)
+	};
 
 	// HP バーサイズ（頭上配置）
 	inline constexpr double HPBarWidth = 240.0;
 	inline constexpr double HPBarHeight = 16.0;
-	inline constexpr double HPBarAboveOffset = 12.0; // 頭上余白
+	inline constexpr double HPBarAboveOffset = -100.0; // 頭上余白
 	inline constexpr double HPLabelAboveOffset = 34.0; // バー上のラベル距離
 
 	// ボタンサイズ
@@ -19,11 +28,11 @@ namespace BattleLayout
 	inline constexpr double ButtonGapHalf = 140.0; // 互換用
 
 	// 攻撃選択（左上に縦並び）
-	inline constexpr Size AttackButtonSize{ 160, 70 };
+	inline constexpr Size AttackButtonSize{ 300, 120 };
 	inline constexpr int32 AttackButtonR = 8;
 	inline constexpr double AttackLeftMargin = 20.0;
-	inline constexpr double AttackTopMargin = 100.0;
-	inline constexpr double AttackButtonGap = 20.0;
+	inline constexpr double AttackTopMargin = 90.0;
+	inline constexpr double AttackButtonGap = -20.0;
 
 	// 左上スペース：コストボックス
 	inline constexpr Size CostPanelSize{ 250, 60 };
@@ -37,12 +46,12 @@ namespace BattleLayout
 
 	inline Vec2 PlayerPos(const Size& sceneSize)
 	{
-		return Vec2{ 270.0, static_cast<double>(sceneSize.y) - 250.0 };
+		return Vec2{ 290.0, 0 };
 	}
 
 	inline Vec2 EnemyPos(const Size& sceneSize)
 	{
-		return Vec2{ static_cast<double>(sceneSize.x) - 290.0, 70.0 };
+		return Vec2{ static_cast<double>(sceneSize.x) - 340.0,  0 };
 	}
 
 	inline RectF PlayerHPBarBG(const Size& sceneSize)

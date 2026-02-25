@@ -72,6 +72,11 @@ private:
 		static constexpr double TotalDuration = FlightDuration + BlinkDuration; // 合計1.0秒
 	};
 
+	// ▼ 追加: 防御ボタン用テクスチャ
+	s3d::Texture m_texGuardOn;
+	s3d::Texture m_texGuardOff;
+	// ▲ 追加ここまで
+
 	BattleState m_state;
 	FaceTextures m_faces;
 	CardDeck m_deck;
@@ -79,6 +84,14 @@ private:
 
 	s3d::Texture m_texPlayer;
 	s3d::Texture m_texEnemy;
+
+	s3d::Texture m_texBattleBackground;
+
+	// ▼ 追加: コマンド枠用テクスチャ
+	s3d::Texture m_texCommandQuantity;
+	s3d::Texture m_texCommandQuality;
+	s3d::Texture m_texCommandCounter;
+	// ▲ 追加ここまで
 
 	std::shared_ptr<MultiplayerManager> m_multiplayer;
 	bool m_isOnlineMode = false;
@@ -104,8 +117,36 @@ private:
 	bool m_remoteDefending = false;
 	double m_remoteDefendEndTime = 0.0;
 
+	// ホスト側: クライアントの現在手札を管理（スロット0-3のプールインデックス, 0xFF=未同期）
+	std::array<uint8, 4> m_clientActualHand{0xFF, 0xFF, 0xFF, 0xFF};
+	std::array<uint8, 4> m_clientVisualHand{0xFF, 0xFF, 0xFF, 0xFF};
+
 	// オーラ描画（差し替え可能）
 	std::unique_ptr<IAuraRenderer> m_auraRenderer;
+
+	// プレイヤー攻撃アニメーション（属性別テクスチャ）
+	s3d::Texture m_texPlayerAttackQuantity1;
+	s3d::Texture m_texPlayerAttackQuantity2;
+	s3d::Texture m_texPlayerAttackQuality1;
+	s3d::Texture m_texPlayerAttackQuality2;
+	s3d::Texture m_texPlayerAttackCounter1;
+	s3d::Texture m_texPlayerAttackCounter2;
+	Stopwatch m_playerAttackAnimTimer{ StartImmediately::No };
+	bool m_playerAttackAnimActive = false;
+
+	// 敵攻撃アニメーション（属性別テクスチャ）
+	s3d::Texture m_texEnemyAttackQuantity1;
+	s3d::Texture m_texEnemyAttackQuantity2;
+	s3d::Texture m_texEnemyAttackQuality1;
+	s3d::Texture m_texEnemyAttackQuality2;
+	s3d::Texture m_texEnemyAttackCounter1;
+	s3d::Texture m_texEnemyAttackCounter2;
+	Stopwatch m_enemyAttackAnimTimer{ StartImmediately::No };
+	bool m_enemyAttackAnimActive = false;
+
+	static constexpr double AttackAnimFrame1Duration = 0.25; // 1枚目の表示時間（秒）
+	static constexpr double AttackAnimFrame2Duration = 0.5; // 2枚目の表示時間（秒）
+	static constexpr double AttackAnimTotalDuration = AttackAnimFrame1Duration + AttackAnimFrame2Duration;
 
 	void setupBattleLoop();
 

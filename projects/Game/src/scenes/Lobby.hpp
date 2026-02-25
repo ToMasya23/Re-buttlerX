@@ -61,7 +61,7 @@ public:
 	void draw() const override;
 
 private:
-	s3d::Texture m_player{ U"assets/ui/characters/player.png" };
+	s3d::Texture m_player{ U"assets/ui/characters/player/idle/player.png" };
 
 	Transition m_pvpTr{ 0.4s, 0.2s };
 	Transition m_pveTr{ 0.4s, 0.2s };
