@@ -764,7 +764,14 @@ Game::Game(const InitData& init)
 	}
 
 	m_texPlayer = s3d::Texture{ U"assets/ui/characters/player/idle/player.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerIdleQuantity = s3d::Texture{ U"assets/ui/characters/player/idle/player_quantity.png", s3d::TextureDesc::Unmipped };
+	m_texPlayerIdleQuality  = s3d::Texture{ U"assets/ui/characters/player/idle/player_quality.png",  s3d::TextureDesc::Unmipped };
+	m_texPlayerIdleCounter  = s3d::Texture{ U"assets/ui/characters/player/idle/player_counter.png",  s3d::TextureDesc::Unmipped };
+
 	m_texEnemy = s3d::Texture{ U"assets/ui/characters/enemy/idle/enemy.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyIdleQuantity = s3d::Texture{ U"assets/ui/characters/enemy/idle/enemy_quantity.png", s3d::TextureDesc::Unmipped };
+	m_texEnemyIdleQuality  = s3d::Texture{ U"assets/ui/characters/enemy/idle/enemy_quality.png",  s3d::TextureDesc::Unmipped };
+	m_texEnemyIdleCounter  = s3d::Texture{ U"assets/ui/characters/enemy/idle/enemy_counter.png",  s3d::TextureDesc::Unmipped };
 
 	// 攻撃アニメーション用テクスチャ（属性別）
 	m_texPlayerAttackQuantity1 = s3d::Texture{ U"assets/ui/characters/player/attack/quantity/player_quantity_1.png", s3d::TextureDesc::Unmipped };
@@ -1330,6 +1337,18 @@ void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 s
 	case net::BattleEventType::ClientAttackBlocked:
 	{
 		const int32 attrId = net::unpackAttributeId(flags);
+
+		// 属性相性ログ（防御側の現在属性と攻撃属性IDで判定）
+		// localPerspective=true → 自分が攻撃側, localPerspective=false → 自分が防御側
+		const int32 defenderAttr = localPerspective ? m_state.enemyAttributeId : m_state.playerAttributeId;
+		const double mult = Attribute::typeMultiplier(attrId, defenderAttr);
+		if (mult > 1.0)
+		{
+			pushLog(localPerspective
+				? U"弱点をついた！ダメージ×{:.1f}！"_fmt(mult)
+				: U"弱点をつかれた！ダメージ×{:.1f}！"_fmt(mult));
+		}
+
 		if (localPerspective)
 			m_state.playerAttributeId = attrId;
 		else
@@ -1393,7 +1412,15 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 	m_playerAttackAnimTimer.restart();
 
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
-	const int32 finalDamage = m_remoteDefending ? 0 : damage;
+
+	// 属性相性補正（攻撃側の属性 vs 防御側の現在属性）
+	int32 attackerAttr = 0;
+	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+		attackerAttr = m_deck.getActualCard(slotIndex).attributeId;
+	const double typeMult = Attribute::typeMultiplier(attackerAttr, m_state.enemyAttributeId);
+	const int32 boostedDamage = static_cast<int32>(damage * typeMult);
+
+	const int32 finalDamage = m_remoteDefending ? 0 : boostedDamage;
 	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
 
 	// 防御成功時はクレイジーゲージを変更しない
@@ -1517,28 +1544,38 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	m_enemyAttackAnimActive = true;
 	m_enemyAttackAnimTimer.restart();
 
-	const int32 finalDamage = m_state.defending ? 0 : damage;
-	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
+	// 属性相性補正は敵属性更新後に計算するため、後で適用（enemyAttackerAttr を先に確定させる）
+	// ここでは damage をそのまま保持し、属性更新後に補正する
 	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
-	
-	// 防御成功時はクレイジーゲージを変更しない
-	if (finalDamage > 0)
-	{
-		BattleLogic::addCrazy(m_state, false, +20);
-	}
 
 	// 敵の属性を更新（ホスト側のクライアント手札テーブルを優先、なければホストデッキでフォールバック）
+	// ※属性相性計算のため更新前に攻撃属性を取得
+	int32 enemyAttackerAttr = 0;
 	if (slotIndex >= 0 && slotIndex < 4)
 	{
 		const CardSpec* clientCard = m_deck.getCardByPoolIndex(m_clientActualHand[static_cast<size_t>(slotIndex)]);
 		if (clientCard)
 		{
+			enemyAttackerAttr = clientCard->attributeId;
 			m_state.enemyAttributeId = clientCard->attributeId;
 		}
 		else if (slotIndex < static_cast<int>(m_deck.current().size()))
 		{
-			m_state.enemyAttributeId = m_deck.getActualCard(slotIndex).attributeId;
+			enemyAttackerAttr = m_deck.getActualCard(slotIndex).attributeId;
+			m_state.enemyAttributeId = enemyAttackerAttr;
 		}
+	}
+
+	// 属性相性補正（敵の攻撃属性 vs プレイヤーの現在属性）
+	const double enemyTypeMult = Attribute::typeMultiplier(enemyAttackerAttr, m_state.playerAttributeId);
+	const int32 boostedEnemyDamage = static_cast<int32>(damage * enemyTypeMult);
+	const int32 finalDamage = m_state.defending ? 0 : boostedEnemyDamage;
+	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
+
+	// 防御成功時はクレイジーゲージを変更しない
+	if (finalDamage > 0)
+	{
+		BattleLogic::addCrazy(m_state, false, +20);
 	}
 
 	// 防御成功時はAttackBlockedイベントに変更
@@ -1800,7 +1837,12 @@ void Game::draw() const
 		}
 		else
 		{
-			drawFit(m_texPlayer, pRect, playerColor);
+			// 属性IDに応じてアイドルテクスチャを選択（未設定なら既定画像）
+			const s3d::Texture* pIdle = &m_texPlayer;
+			if      (m_state.playerAttributeId == 1 && m_texPlayerIdleQuantity) pIdle = &m_texPlayerIdleQuantity;
+			else if (m_state.playerAttributeId == 2 && m_texPlayerIdleQuality)  pIdle = &m_texPlayerIdleQuality;
+			else if (m_state.playerAttributeId == 3 && m_texPlayerIdleCounter)  pIdle = &m_texPlayerIdleCounter;
+			drawFit(*pIdle, pRect, playerColor);
 		}
 		// 敵の攻撃アニメーション中はフレームに応じたテクスチャを使用
 		if (m_enemyAttackAnimActive)
@@ -1831,7 +1873,12 @@ void Game::draw() const
 		}
 		else
 		{
-			drawFit(m_texEnemy, eRect, enemyColor);
+			// 属性IDに応じてアイドルテクスチャを選択（未設定なら既定画像）
+			const s3d::Texture* pEIdle = &m_texEnemy;
+			if      (m_state.enemyAttributeId == 1 && m_texEnemyIdleQuantity) pEIdle = &m_texEnemyIdleQuantity;
+			else if (m_state.enemyAttributeId == 2 && m_texEnemyIdleQuality)  pEIdle = &m_texEnemyIdleQuality;
+			else if (m_state.enemyAttributeId == 3 && m_texEnemyIdleCounter)  pEIdle = &m_texEnemyIdleCounter;
+			drawFit(*pEIdle, eRect, enemyColor);
 		}
 
 		const Font& bold = FontAsset(U"Bold");

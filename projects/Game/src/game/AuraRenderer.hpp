@@ -19,6 +19,17 @@ namespace Attribute
         default:       return ColorF{ 0.5, 0.5, 0.5, 0.3 };  // 灰色
         }
     }
+
+    // 属性相性倍率を返す（三つ巴）
+    // 質(2) > 量(1), 反撃(3) > 質(2), 量(1) > 反撃(3)
+    inline double typeMultiplier(int32 attackerAttr, int32 defenderAttr)
+    {
+        if (attackerAttr == Default || defenderAttr == Default) return 1.0;
+        if (attackerAttr == Quality  && defenderAttr == Quantity) return 1.3;
+        if (attackerAttr == Counter  && defenderAttr == Quality)  return 1.3;
+        if (attackerAttr == Quantity && defenderAttr == Counter)  return 1.3;
+        return 1.0;
+    }
 }
 
 // オーラ描画の抽象インターフェース

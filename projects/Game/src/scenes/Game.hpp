@@ -83,7 +83,14 @@ private:
 	std::unique_ptr<BattleLoop> m_loop;
 
 	s3d::Texture m_texPlayer;
+	s3d::Texture m_texPlayerIdleQuantity;
+	s3d::Texture m_texPlayerIdleQuality;
+	s3d::Texture m_texPlayerIdleCounter;
+
 	s3d::Texture m_texEnemy;
+	s3d::Texture m_texEnemyIdleQuantity;
+	s3d::Texture m_texEnemyIdleQuality;
+	s3d::Texture m_texEnemyIdleCounter;
 
 	s3d::Texture m_texBattleBackground;
 
