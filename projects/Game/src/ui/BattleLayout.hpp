@@ -51,7 +51,7 @@ namespace BattleLayout
 
 	inline Vec2 EnemyPos(const Size& sceneSize)
 	{
-		return Vec2{ static_cast<double>(sceneSize.x) - 340.0,  0 };
+		return Vec2{ static_cast<double>(sceneSize.x) - 390.0,  0 };
 	}
 
 	inline RectF PlayerHPBarBG(const Size& sceneSize)
@@ -79,8 +79,8 @@ namespace BattleLayout
 	}
 
 // クレイジーゲージ（HPバー右端に配置）
-inline constexpr double CrazyRingRadius = 20.0;
-inline constexpr double CrazyRingOffsetX = 18.0; // HPバー右端からのオフセット
+inline constexpr double CrazyRingRadius = 40.0;
+inline constexpr double CrazyRingOffsetX = 30.0; // HPバー右端からのオフセット
 inline Vec2 PlayerCrazyCenter(const Size& sceneSize)
 {
     const RectF bar = PlayerHPBarBG(sceneSize);
@@ -101,7 +101,7 @@ inline Vec2 EnemyCrazyCenter(const Size& sceneSize)
 	}
 
 	// 左下：プレイヤーパネル（アイコン＋防御）
-	inline constexpr Size PlayerPanelSize{ 240, 88 };
+	inline constexpr Size PlayerPanelSize{ 200, 88 };
 	inline constexpr int32 PlayerPanelR = 10;
 	inline RectF PlayerPanelRect(const Size& sceneSize)
 	{

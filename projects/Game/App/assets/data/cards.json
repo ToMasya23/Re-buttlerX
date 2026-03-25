@@ -4,8 +4,8 @@
             "id": "cmd_001",
             "name": "どういう人生送ったらその価値観になるのかな",
             "description": "",
-            "cost": 7,
-            "delay": 21,
+            "cost": 20,
+            "delay": 10,
             "rarity": "",
             "weight": 1,
             "effects": [
@@ -23,18 +23,18 @@
             "attribute": 1
         },
         {
-            "id": "cmd_002",
-            "name": "院卒だから貴方とは見える景色が違うのかもね笑",
+            "id": "cmd_008",
+            "name": "言われるまで高学歴って気が付かなかった！",
             "description": "",
-            "cost": 7,
-            "delay": 21,
+            "cost": 20,
+            "delay": 10,
             "rarity": "",
             "weight": 1,
             "effects": [
                 {
                     "target": "opponent",
                     "type": "damageHP",
-                    "value": 16
+                    "value": 14
                 },
                 {
                     "target": "opponent",
@@ -48,140 +48,30 @@
             "id": "cmd_003",
             "name": "なんかそういうデータってあるんすか？",
             "description": "",
-            "cost": 5,
-            "delay": 17,
+            "cost": 20,
+            "delay": 10,
             "rarity": "",
             "weight": 1,
             "effects": [
                 {
                     "target": "opponent",
                     "type": "damageHP",
-                    "value": 12
+                    "value": 15
                 },
                 {
                     "target": "opponent",
                     "type": "addCrazy",
-                    "value": 12
+                    "value": 15
                 }
             ],
             "attribute": 3
         },
         {
-            "id": "cmd_004",
-            "name": "感情で語ってばっかで根拠がないよね",
+            "id": "cmd_013",
+            "name": "（ｶﾜｲｿｳﾅﾋﾄ）( :⁍ 」 )",
             "description": "",
-            "cost": 6,
-            "delay": 17,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 14
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 11
-                }
-            ],
-            "attribute": 1
-        },
-        {
-            "id": "cmd_005",
-            "name": "それって貴方の感想ですよね",
-            "description": "",
-            "cost": 4,
-            "delay": 13,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 9
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 9
-                }
-            ],
-            "attribute": 2
-        },
-        {
-            "id": "cmd_006",
-            "name": "あまり強い言葉を使うなよ",
-            "description": "",
-            "cost": 4,
-            "delay": 12,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 10
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 7
-                }
-            ],
-            "attribute": 3
-        },
-        {
-            "id": "cmd_007",
-            "name": "そんなに興奮しないでください笑",
-            "description": "",
-            "cost": 5,
-            "delay": 14,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 10
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 10
-                }
-            ],
-            "attribute": 1
-        },
-        {
-            "id": "cmd_008",
-            "name": "言われるまで高学歴って気が付かなかった！",
-            "description": "",
-            "cost": 7,
-            "delay": 19,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 14
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 14
-                }
-            ],
-            "attribute": 2
-        },
-        {
-            "id": "cmd_009",
-            "name": "それは雑魚の思考だ",
-            "description": "",
-            "cost": 3,
-            "delay": 9,
+            "cost": 10,
+            "delay": 5,
             "rarity": "",
             "weight": 1,
             "effects": [
@@ -193,46 +83,24 @@
                 {
                     "target": "opponent",
                     "type": "addCrazy",
-                    "value": 5
-                }
-            ],
-            "attribute": 3
-        },
-        {
-            "id": "cmd_010",
-            "name": "年収しか取り柄ないのかな？",
-            "description": "",
-            "cost": 4,
-            "delay": 12,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 7
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 10
+                    "value": 8
                 }
             ],
             "attribute": 1
         },
         {
-            "id": "cmd_011",
-            "name": "現実見ろやコナカス！",
+            "id": "cmd_016",
+            "name": "論点ズレてて草ー",
             "description": "",
-            "cost": 3,
-            "delay": 9,
+            "cost": 10,
+            "delay": 5,
             "rarity": "",
             "weight": 1,
             "effects": [
                 {
                     "target": "opponent",
                     "type": "damageHP",
-                    "value": 5
+                    "value": 8
                 },
                 {
                     "target": "opponent",
@@ -244,10 +112,10 @@
         },
         {
             "id": "cmd_012",
-            "name": "フォロワー少ないね笑",
+            "name": "フォロワー少なっ！( ﾟДﾟ)",
             "description": "",
-            "cost": 3,
-            "delay": 9,
+            "cost": 10,
+            "delay": 5,
             "rarity": "",
             "weight": 1,
             "effects": [
@@ -259,230 +127,10 @@
                 {
                     "target": "opponent",
                     "type": "addCrazy",
-                    "value": 5
+                    "value": 8
                 }
             ],
             "attribute": 3
-        },
-        {
-            "id": "cmd_013",
-            "name": "（ｶﾜｲｿｳﾅﾋﾄ）( :⁍ 」 )",
-            "description": "",
-            "cost": 3,
-            "delay": 8,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 6
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 6
-                }
-            ],
-            "attribute": 1
-        },
-        {
-            "id": "cmd_014",
-            "name": "粉プンプンかな？",
-            "description": "",
-            "cost": 2,
-            "delay": 7,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 6
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 3
-                }
-            ],
-            "attribute": 2
-        },
-        {
-            "id": "cmd_015",
-            "name": "生活大変そうだね",
-            "description": "",
-            "cost": 3,
-            "delay": 8,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 7
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 5
-                }
-            ],
-            "attribute": 3
-        },
-        {
-            "id": "cmd_016",
-            "name": "論点ズレてて草",
-            "description": "",
-            "cost": 2,
-            "delay": 7,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 3
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 6
-                }
-            ],
-            "attribute": 1
-        },
-        {
-            "id": "cmd_017",
-            "name": "( ﾟ∀ﾟ)o彡゜（バーカバーカ）！",
-            "description": "",
-            "cost": 2,
-            "delay": 6,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 4
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 4
-                }
-            ],
-            "attribute": 2
-        },
-        {
-            "id": "cmd_018",
-            "name": "頭悪くないか",
-            "description": "",
-            "cost": 2,
-            "delay": 6,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 5
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 3
-                }
-            ],
-            "attribute": 3
-        },
-        {
-            "id": "cmd_019",
-            "name": "隙自語キッツw",
-            "description": "",
-            "cost": 2,
-            "delay": 6,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 3
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 5
-                }
-            ],
-            "attribute": 1
-        },
-        {
-            "id": "cmd_020",
-            "name": "(　´∀｀)ｵﾏｴﾓﾅｰ",
-            "description": "",
-            "cost": 2,
-            "delay": 5,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 3
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 3
-                }
-            ],
-            "attribute": 2
-        },
-        {
-            "id": "cmd_021",
-            "name": "ggrks",
-            "description": "",
-            "cost": 2,
-            "delay": 5,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 5
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 2
-                }
-            ],
-            "attribute": 3
-        },
-        {
-            "id": "cmd_022",
-            "name": "必死で草w",
-            "description": "",
-            "cost": 2,
-            "delay": 4,
-            "rarity": "",
-            "weight": 1,
-            "effects": [
-                {
-                    "target": "opponent",
-                    "type": "damageHP",
-                    "value": 3
-                },
-                {
-                    "target": "opponent",
-                    "type": "addCrazy",
-                    "value": 3
-                }
-            ],
-            "attribute": 1
         }
     ]
 }

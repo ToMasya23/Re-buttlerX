@@ -77,6 +77,12 @@ private:
 	s3d::Texture m_texGuardOff;
 	// ▲ 追加ここまで
 
+	// プレイヤーアイコン
+	s3d::Texture m_texPlayerIcon;
+
+	// 詠唱中画像
+	s3d::Texture m_texWriting;
+
 	BattleState m_state;
 	FaceTextures m_faces;
 	CardDeck m_deck;

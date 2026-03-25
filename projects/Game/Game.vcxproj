@@ -129,7 +129,12 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="src\scenes\Title.cpp" />
-    <ClCompile Include="src\scenes\Game.cpp" />
+    <ClCompile Include="src\scenes\Game_Init.cpp" />
+    <ClCompile Include="src\scenes\Game_Draw.cpp" />
+    <ClCompile Include="src\game\Game_Loops.cpp" />
+    <ClCompile Include="src\game\Game_Battle.cpp" />
+    <ClCompile Include="src\game\Game_Update.cpp" />
+    <ClCompile Include="src\network\Game_Network.cpp" />
     <ClCompile Include="src\scenes\Lobby.cpp" />
     <ClCompile Include="src\scenes\Matching.cpp" />
     <ClCompile Include="src\scenes\Result.cpp" />
