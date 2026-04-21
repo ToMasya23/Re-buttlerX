@@ -51,19 +51,37 @@ void Game::update()
 		m_enemyAttackAnimActive = false;
 	}
 
+	// クレイジーズーム演出の終了判定
+	if (m_crazyZoom.active && m_crazyZoom.timer.sF() >= CrazyZoomEffect::Duration)
+	{
+		m_crazyZoom.active = false;
+	}
+
+	// 弱点シェイク演出の終了判定
+	if (m_weaknessShake.active && m_weaknessShake.timer.sF() >= WeaknessShakeEffect::Duration)
+	{
+		m_weaknessShake.active = false;
+	}
+
 	m_deck.updateRefills();
 
 	// ===== クレイジーモード終了チェック =====
+	// PvP クライアントはホストが権威のため自律終了しない（applyStateSync 経由で終了）
 	const double currentTime = Scene::Time();
-	if (BattleLogic::shouldExitCrazyMode(m_state, true, currentTime))
+	if (!m_isOnlineMode || m_isHost)
 	{
-		BattleLogic::endCrazyMode(m_state, true);
-		m_deck.exitCrazyMode();
-		pushLog(U"【CRAZY MODE 終了】");
-	}
-	if (BattleLogic::shouldExitCrazyMode(m_state, false, currentTime))
-	{
-		BattleLogic::endCrazyMode(m_state, false);
+		if (BattleLogic::shouldExitCrazyMode(m_state, true, currentTime))
+		{
+			BattleLogic::endCrazyMode(m_state, true);
+			m_deck.exitCrazyMode();
+			pushLog(U"【CRAZY MODE 終了】");
+			if (m_isOnlineMode && m_isHost) sendStateSync();
+		}
+		if (BattleLogic::shouldExitCrazyMode(m_state, false, currentTime))
+		{
+			BattleLogic::endCrazyMode(m_state, false);
+			if (m_isOnlineMode && m_isHost) sendStateSync();
+		}
 	}
 
 	BattleInput input = collectBattleInput();
@@ -232,7 +250,7 @@ void Game::replaceUsedCardIfNeeded()
 	}
 }
 
-void Game::startPlayerProjectile(int32 slotIndex, const String& cardName)
+void Game::startPlayerProjectile(int32 slotIndex, const String& cardName, bool isBlocked)
 {
 	const Size sceneSize = Scene::Size();
 
@@ -245,11 +263,12 @@ void Game::startPlayerProjectile(int32 slotIndex, const String& cardName)
 
 	m_playerProjectile.slotIndex = slotIndex;
 	m_playerProjectile.cardName = cardName;
+	m_playerProjectile.isBlocked = isBlocked;
 	m_playerProjectile.timer.restart();
 	m_playerProjectile.active = true;
 }
 
-void Game::startEnemyProjectile(int32 slotIndex, const String& cardName)
+void Game::startEnemyProjectile(int32 slotIndex, const String& cardName, bool isBlocked)
 {
 	const Size sceneSize = Scene::Size();
 
@@ -262,26 +281,50 @@ void Game::startEnemyProjectile(int32 slotIndex, const String& cardName)
 
 	m_enemyProjectile.slotIndex = slotIndex;
 	m_enemyProjectile.cardName = cardName;
+	m_enemyProjectile.isBlocked = isBlocked;
 	m_enemyProjectile.timer.restart();
 	m_enemyProjectile.active = true;
 }
 
 void Game::updateProjectiles()
 {
+	// 防御エフェクトは着弾の FlightDuration/5 秒前に先出し
+	static constexpr double GuardEarlyTrigger = CardProjectile::FlightDuration / 5.0;
+
 	// プレイヤーの飛翔演出を更新
 	if (m_playerProjectile.active)
 	{
 		const double elapsed = m_playerProjectile.timer.sF();
 
+		// 防御エフェクト先出し
+		if (m_playerProjectile.isBlocked && !m_playerProjectile.guardEffectTriggered
+			&& elapsed >= CardProjectile::FlightDuration - GuardEarlyTrigger)
+		{
+			m_playerProjectile.guardEffectTriggered = true;
+			triggerGuardEffect(false);
+		}
+
 		if (!m_playerProjectile.isBlinking && elapsed >= CardProjectile::FlightDuration)
 		{
 			m_playerProjectile.isBlinking = true;
+			// 到達タイミング：ダメージ・演出を適用
+			applyPendingImpact(m_playerProjectile.pendingImpact);
+			// 防御成功時は着弾と同時に消す
+			if (m_playerProjectile.isBlocked)
+			{
+				m_playerProjectile.active = false;
+				m_playerProjectile.isBlinking = false;
+				m_playerProjectile.isBlocked = false;
+				m_playerProjectile.guardEffectTriggered = false;
+			}
 		}
 
-		if (elapsed >= CardProjectile::TotalDuration)
+		if (m_playerProjectile.active && elapsed >= CardProjectile::TotalDuration)
 		{
 			m_playerProjectile.active = false;
 			m_playerProjectile.isBlinking = false;
+			m_playerProjectile.isBlocked = false;
+			m_playerProjectile.guardEffectTriggered = false;
 		}
 	}
 
@@ -290,17 +333,91 @@ void Game::updateProjectiles()
 	{
 		const double elapsed = m_enemyProjectile.timer.sF();
 
+		// 防御エフェクト先出し
+		if (m_enemyProjectile.isBlocked && !m_enemyProjectile.guardEffectTriggered
+			&& elapsed >= CardProjectile::FlightDuration - GuardEarlyTrigger)
+		{
+			m_enemyProjectile.guardEffectTriggered = true;
+			triggerGuardEffect(true);
+		}
+
 		if (!m_enemyProjectile.isBlinking && elapsed >= CardProjectile::FlightDuration)
 		{
 			m_enemyProjectile.isBlinking = true;
+			// 到達タイミング：ダメージ・演出を適用
+			applyPendingImpact(m_enemyProjectile.pendingImpact);
+			// 防御成功時は着弾と同時に消す
+			if (m_enemyProjectile.isBlocked)
+			{
+				m_enemyProjectile.active = false;
+				m_enemyProjectile.isBlinking = false;
+				m_enemyProjectile.isBlocked = false;
+				m_enemyProjectile.guardEffectTriggered = false;
+			}
 		}
 
-		if (elapsed >= CardProjectile::TotalDuration)
+		if (m_enemyProjectile.active && elapsed >= CardProjectile::TotalDuration)
 		{
 			m_enemyProjectile.active = false;
 			m_enemyProjectile.isBlinking = false;
+			m_enemyProjectile.isBlocked = false;
+			m_enemyProjectile.guardEffectTriggered = false;
 		}
 	}
+}
+
+void Game::applyPendingImpact(PendingImpact& impact)
+{
+	if (!impact.valid) return;
+	impact.valid = false;
+
+	// HP ダメージ適用
+	if (impact.hpChange > 0)
+	{
+		if (impact.targetIsPlayer)
+			m_state.playerHP = Max(0, m_state.playerHP - impact.hpChange);
+		else
+			m_state.enemyHP = Max(0, m_state.enemyHP - impact.hpChange);
+	}
+
+	// クレイジーゲージ増加
+	if (impact.crazyGain > 0)
+		BattleLogic::addCrazy(m_state, impact.crazyTargetIsEnemy, impact.crazyGain);
+
+	// ログ出力・フラッシュエフェクト（emitLocalEvent 内で処理）
+	emitLocalEvent(impact.eventType, impact.primaryValue, impact.secondaryValue, impact.flags);
+
+	// ステート同期（PvP ホスト）
+	if (impact.shouldSendStateSync)
+		sendStateSync();
+
+	// バトル終了判定
+	if (impact.shouldCheckBattleEnd)
+		finishBattleIfNeeded();
+}
+
+void Game::triggerGuardEffect(bool isPlayer)
+{
+	const Size sceneSize = Scene::Size();
+	m_guardEffect.active = true;
+	m_guardEffect.timer.restart();
+	m_guardEffect.pos = isPlayer
+		? BattleLayout::PlayerPos(sceneSize) + Vec2{ BattleLayout::EntitySize } * 0.5
+		: BattleLayout::EnemyPos(sceneSize)  + Vec2{ BattleLayout::EntitySize } * 0.5;
+}
+
+void Game::triggerCrazyZoom(bool isPlayer)
+{
+	m_crazyZoom.isPlayer = isPlayer;
+	m_crazyZoom.active   = true;
+	m_crazyZoom.timer.restart();
+}
+
+void Game::triggerWeaknessShake(bool isPlayer)
+{
+	m_weaknessShake.isPlayer = isPlayer;
+	m_weaknessShake.active   = true;
+	m_weaknessShake.timer.restart();
 }
 
 void Game::updatePausedUI()

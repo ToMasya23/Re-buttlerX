@@ -20,6 +20,7 @@ public:
 			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
 			g.m_deck.enterCrazyMode();
 			g.pushLog(U"【CRAZY MODE 発動！】");
+			g.triggerCrazyZoom(true);
 		}
 
 		const auto& cards = g.m_deck.current();
@@ -107,6 +108,14 @@ public:
 			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
 			g.m_deck.enterCrazyMode();
 			g.pushLog(U"【CRAZY MODE 発動！】");
+			g.triggerCrazyZoom(true);
+			g.sendStateSync();
+		}
+		// クライアント側のクレイジーモード発動チェック（ホストが権威として管理）
+		if (BattleLogic::shouldEnterCrazyMode(g.m_state, false))
+		{
+			BattleLogic::startCrazyMode(g.m_state, false, Scene::Time());
+			g.triggerCrazyZoom(false);
 			g.sendStateSync();
 		}
 
@@ -412,13 +421,7 @@ public:
 		// 手札の変化を検出してホストへ同期
 		checkAndSendHandSync();
 
-		// ===== クレイジーモード発動チェック（クライアント側） =====
-		if (BattleLogic::shouldEnterCrazyMode(g.m_state, true))
-		{
-			BattleLogic::startCrazyMode(g.m_state, true, Scene::Time());
-			g.m_deck.enterCrazyMode();
-			g.pushLog(U"【CRAZY MODE 発動！】");
-		}
+		// クレイジーモード発動はホストが権威として管理し applyStateSync 経由で反映される
 
 		const auto& cards = g.m_deck.current();
 
@@ -555,13 +558,13 @@ private:
 				{
 					break;
 				}
-				m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
-
 				// クライアント側で自分の攻撃イベントを受信した場合、カードを更新＆演出開始
 				if (msg->eventType == net::BattleEventType::ClientAttackDamage ||
 				    msg->eventType == net::BattleEventType::ClientAttackBlocked)
 				{
+					const bool isBlocked = (msg->eventType == net::BattleEventType::ClientAttackBlocked);
 					int32 slotIndex = msg->secondaryValue;
+					bool projectileStarted = false;
 					if (slotIndex >= 0 && slotIndex < 4)
 					{
 						// 攻撃アニメーション開始
@@ -571,38 +574,72 @@ private:
 						m_game.m_deck.onUse(slotIndex);
 						m_game.replaceUsedCardIfNeeded();
 
-						// カード飛翔演出を開始
+						// カード飛翔演出を開始し、到達時に演出を遅延適用
 						if (slotIndex < static_cast<int>(m_game.m_deck.current().size()))
 						{
 							const CardSpec& visualCard = m_game.m_deck.getVisualCard(slotIndex);
 							String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
-							m_game.startPlayerProjectile(slotIndex, cardName);
+							m_game.startPlayerProjectile(slotIndex, cardName, isBlocked);
+
+							auto& impact = m_game.m_playerProjectile.pendingImpact;
+							impact.valid          = true;
+							impact.eventType      = msg->eventType;
+							impact.primaryValue   = msg->primaryValue;
+							impact.secondaryValue = msg->secondaryValue;
+							impact.flags          = msg->flags;
+							impact.shouldCheckBattleEnd = false;
+							impact.shouldSendStateSync  = false;
+							projectileStarted = true;
 						}
 					}
+					// プロジェクタイルが起動できない場合は即時フラッシュ
+					if (!projectileStarted)
+						m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
 				}
 				// クライアント側でホストの攻撃イベントを受信した場合、敵側の演出開始
 				else if (msg->eventType == net::BattleEventType::HostAttackDamage ||
 				         msg->eventType == net::BattleEventType::HostAttackBlocked)
 				{
+					const bool isBlocked = (msg->eventType == net::BattleEventType::HostAttackBlocked);
 					int32 slotIndex = msg->secondaryValue;
+					bool projectileStarted = false;
 
 					// 敵攻撃アニメーション開始
 					m_game.m_enemyAttackAnimActive = true;
 					m_game.m_enemyAttackAnimTimer.restart();
 
-					// 敵からの攻撃演出を開始
+					// 敵からの攻撃演出を開始し、到達時に演出を遅延適用
 					if (slotIndex >= 0 && slotIndex < static_cast<int>(m_game.m_deck.current().size()))
 					{
 						const CardSpec& visualCard = m_game.m_deck.getVisualCard(slotIndex);
 						String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
-						m_game.startEnemyProjectile(slotIndex, cardName);
+						m_game.startEnemyProjectile(slotIndex, cardName, isBlocked);
+
+						auto& impact = m_game.m_enemyProjectile.pendingImpact;
+						impact.valid          = true;
+						impact.eventType      = msg->eventType;
+						impact.primaryValue   = msg->primaryValue;
+						impact.secondaryValue = msg->secondaryValue;
+						impact.flags          = msg->flags;
+						impact.shouldCheckBattleEnd = false;
+						impact.shouldSendStateSync  = false;
+						projectileStarted = true;
 					}
+					// プロジェクタイルが起動できない場合は即時フラッシュ
+					if (!projectileStarted)
+						m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
 				}
 				// クライアント側で自分の防御イベントを受信した場合、防御状態を設定
 				else if (msg->eventType == net::BattleEventType::ClientDefend)
 				{
 					m_game.m_state.defending = true;
 					m_game.m_state.defendTimer.restart();
+					m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
+				}
+				// 攻撃・防御以外のイベントは即時適用
+				else
+				{
+					m_game.emitLocalEvent(msg->eventType, msg->primaryValue, msg->secondaryValue, msg->flags);
 				}
 			}
 			else if (type == net::PacketType::BattleEnd)

@@ -19,7 +19,12 @@ void Game::sendStateSync()
 	msg.hostCrazy = m_state.playerCrazy;
 	msg.clientCrazy = m_state.enemyCrazy;
 	msg.clientCost = static_cast<float>(m_remoteCostValue);
-	msg.isHostTurn = 0;
+	// isHostTurn フィールドをクレイジーモードフラグとして転用
+	// bit0 = ホストのクレイジーモード, bit1 = クライアントのクレイジーモード
+	msg.isHostTurn = static_cast<uint8>(
+		(m_state.playerCrazyMode ? 0x01 : 0x00) |
+		(m_state.enemyCrazyMode  ? 0x02 : 0x00)
+	);
 	msg.turnNumber = 0;
 
 	// ホスト側の状態エンコード（0=通常, 1=防御, 2=詠唱）
@@ -83,6 +88,37 @@ void Game::applyStateSync(const net::StateSnapshotMessage& msg)
 	m_state.playerHP = msg.clientHP;
 	m_state.enemyHP = msg.hostHP;
 	m_state.costValue = msg.clientCost;
+
+	// クレイジーモードフラグを受信して反映
+	// ホスト視点: bit0=host, bit1=client → クライアント視点: bit0=enemy, bit1=self
+	const bool hostCrazyMode   = (msg.isHostTurn & 0x01) != 0;
+	const bool clientCrazyMode = (msg.isHostTurn & 0x02) != 0;
+
+	// 自分（クライアント）のクレイジーモード
+	if (clientCrazyMode && !m_state.playerCrazyMode)
+	{
+		BattleLogic::startCrazyMode(m_state, true, Scene::Time());
+		m_deck.enterCrazyMode();
+		pushLog(U"【CRAZY MODE 発動！】");
+		triggerCrazyZoom(true);
+	}
+	else if (!clientCrazyMode && m_state.playerCrazyMode)
+	{
+		BattleLogic::endCrazyMode(m_state, true);
+		m_deck.exitCrazyMode();
+		pushLog(U"【CRAZY MODE 終了】");
+	}
+
+	// ホスト（敵）のクレイジーモード
+	if (hostCrazyMode && !m_state.enemyCrazyMode)
+	{
+		BattleLogic::startCrazyMode(m_state, false, Scene::Time());
+		triggerCrazyZoom(false);
+	}
+	else if (!hostCrazyMode && m_state.enemyCrazyMode)
+	{
+		BattleLogic::endCrazyMode(m_state, false);
+	}
 
 	// クレイジーモード中はゲージを上書きしない
 	if (!m_state.playerCrazyMode)

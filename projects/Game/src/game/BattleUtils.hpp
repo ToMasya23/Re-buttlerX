@@ -36,7 +36,7 @@ namespace BattleUtils
     inline int32 slotDamage(int slotIndex, const CardDeck& deck)
     {
         const CardSpec& actualCard = deck.getActualCard(slotIndex);
-        return calculateDamage(actualCard.name);
+        return actualCard.damageHP;
     }
 }
 

@@ -58,13 +58,20 @@ void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 s
 		m_state.battleMessage = message;
 	}
 
-	if (flags & net::EventFlagHitEnemy)
+	// クライアント側では BattleState の player/enemy が逆転しているため HitTarget を入れ替える
+	// ホスト: HitEnemy=クライアントが被弾, HitPlayer=ホストが被弾
+	// クライアント: playerHP=自分, enemyHP=ホスト → Enemy/Player を反転して適用
 	{
-		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
-	}
-	else if (flags & net::EventFlagHitPlayer)
-	{
-		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+		const bool hitEnemy  = (flags & net::EventFlagHitEnemy)  != 0;
+		const bool hitPlayer = (flags & net::EventFlagHitPlayer) != 0;
+		const bool swapTarget = m_isOnlineMode && !m_isHost;
+
+		if ((hitEnemy && !swapTarget) || (hitPlayer && swapTarget))
+			BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
+		else if ((hitPlayer && !swapTarget) || (hitEnemy && swapTarget))
+			BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+
+		m_state.hitIsWeakness = false; // 後続の属性判定で上書きされる
 	}
 
 	// 攻撃イベントに埋め込まれた属性IDを復元して状態に反映
@@ -86,6 +93,11 @@ void Game::emitLocalEvent(net::BattleEventType type, int32 primaryValue, int32 s
 			pushLog(localPerspective
 				? U"弱点をついた！ダメージ×{:.1f}！"_fmt(mult)
 				: U"弱点をつかれた！ダメージ×{:.1f}！"_fmt(mult));
+			// 弱点被弾シェイク：防御側キャラクターを揺らす
+			// localPerspective=true → 相手（Enemy）が弱点を突かれた
+			// localPerspective=false → 自分（Player）が弱点を突かれた
+			triggerWeaknessShake(!localPerspective);
+			m_state.hitIsWeakness = true;
 		}
 
 		if (localPerspective)
@@ -150,8 +162,6 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 	m_playerAttackAnimActive = true;
 	m_playerAttackAnimTimer.restart();
 
-	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Enemy);
-
 	// 属性相性補正（攻撃側の属性 vs 防御側の現在属性）
 	int32 attackerAttr = 0;
 	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
@@ -160,25 +170,19 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 	const int32 boostedDamage = static_cast<int32>(damage * typeMult);
 
 	const int32 finalDamage = m_remoteDefending ? 0 : boostedDamage;
-	m_state.enemyHP = Max(0, m_state.enemyHP - finalDamage);
 
-	// 防御成功時はクレイジーゲージを変更しない
-	if (finalDamage > 0)
-	{
-		BattleLogic::addCrazy(m_state, true, +20);
-		BattleLogic::addCrazy(m_state, false, -10);
-	}
+	// 防御成功時はクレイジーゲージ増加なし
+	int32 crazyGain = 0;
+	if (finalDamage > 0 && slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
+		crazyGain = m_deck.getActualCard(slotIndex).addCrazy;
 
 	m_deck.onUse(slotIndex);
 
 	// カード使用後に属性を更新
 	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
-	{
-		const CardSpec& card = m_deck.getActualCard(slotIndex);
-		m_state.playerAttributeId = card.attributeId;
-	}
+		m_state.playerAttributeId = m_deck.getActualCard(slotIndex).attributeId;
 
-	// クレイジーモード中は実際のカード名を表示
+	// クレイジーモード中は実際のカード名を即時表示
 	if (m_deck.isCrazyMode() && slotIndex >= 0)
 	{
 		const CardSpec& actualCard = m_deck.getActualCard(slotIndex);
@@ -187,34 +191,37 @@ void Game::handlePlayerAttack(int slotIndex, int32 damage, net::BattleEventType 
 
 	// 防御成功時はAttackBlockedイベントに変更
 	net::BattleEventType actualEventType = eventType;
-	if (m_remoteDefending)
-	{
-		if (eventType == net::BattleEventType::HostAttackDamage)
-		{
-			actualEventType = net::BattleEventType::HostAttackBlocked;
-		}
-	}
+	if (m_remoteDefending && eventType == net::BattleEventType::HostAttackDamage)
+		actualEventType = net::BattleEventType::HostAttackBlocked;
 
-	// 攻撃発動時の属性IDをフラグにパックして送受信双方が同期できるようにする
 	const uint32 flags = net::packAttributeId(net::EventFlagHitEnemy, m_state.playerAttributeId);
-	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
+	// クライアントへの通知は即時送信（クライアント側の飛翔演出開始に必要）
 	if (broadcastToClient)
-	{
-		sendStateSync();
 		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
-	}
 
-	// カード飛翔演出を開始（有効なスロットの場合のみ）
+	// カード飛翔演出を開始し、到達時に適用するダメージ情報を登録
 	if (slotIndex >= 0 && slotIndex < static_cast<int>(m_deck.current().size()))
 	{
 		const CardSpec& visualCard = m_deck.getVisualCard(slotIndex);
 		String cardName = visualCard.name.isEmpty() ? U"攻撃{}"_fmt(slotIndex + 1) : visualCard.name;
-		startPlayerProjectile(slotIndex, cardName);
+		startPlayerProjectile(slotIndex, cardName, m_remoteDefending);
+
+		auto& impact = m_playerProjectile.pendingImpact;
+		impact.valid               = true;
+		impact.hpChange            = finalDamage;
+		impact.targetIsPlayer      = false;       // 敵がダメージを受ける
+		impact.crazyGain           = crazyGain;
+		impact.crazyTargetIsEnemy  = true;
+		impact.eventType           = actualEventType;
+		impact.primaryValue        = finalDamage;
+		impact.secondaryValue      = slotIndex;
+		impact.flags               = flags;
+		impact.shouldSendStateSync  = broadcastToClient;
+		impact.shouldCheckBattleEnd = true;
 	}
 
 	replaceUsedCardIfNeeded();
-	finishBattleIfNeeded();
 }
 
 void Game::handleActionRejected(int reasonCode, net::BattleEventType eventType, bool broadcastToClient)
@@ -283,10 +290,7 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 	m_enemyAttackAnimActive = true;
 	m_enemyAttackAnimTimer.restart();
 
-	BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
-
 	// 敵の属性を更新（ホスト側のクライアント手札テーブルを優先、なければホストデッキでフォールバック）
-	// ※属性相性計算のため更新前に攻撃属性を取得
 	int32 enemyAttackerAttr = 0;
 	if (slotIndex >= 0 && slotIndex < 4)
 	{
@@ -303,66 +307,77 @@ void Game::handleEnemyAttack(int32 slotIndex, int32 damage, net::BattleEventType
 		}
 	}
 
-	// 属性相性補正（敵の攻撃属性 vs プレイヤーの現在属性）
+	// 属性相性補正
 	const double enemyTypeMult = Attribute::typeMultiplier(enemyAttackerAttr, m_state.playerAttributeId);
 	const int32 boostedEnemyDamage = static_cast<int32>(damage * enemyTypeMult);
 	const int32 finalDamage = m_state.defending ? 0 : boostedEnemyDamage;
-	m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
 
-	// 防御成功時はクレイジーゲージを変更しない
-	if (finalDamage > 0)
+	// 防御成功時はクレイジーゲージ増加なし
+	int32 crazyGain = 0;
+	if (finalDamage > 0 && slotIndex >= 0 && slotIndex < 4)
 	{
-		BattleLogic::addCrazy(m_state, false, +20);
+		const CardSpec* clientCard = m_deck.getCardByPoolIndex(m_clientActualHand[static_cast<size_t>(slotIndex)]);
+		if (clientCard)
+			crazyGain = clientCard->addCrazy;
+		else if (slotIndex < static_cast<int>(m_deck.current().size()))
+			crazyGain = m_deck.getActualCard(slotIndex).addCrazy;
 	}
 
 	// 防御成功時はAttackBlockedイベントに変更
 	net::BattleEventType actualEventType = eventType;
-	if (m_state.defending)
-	{
-		if (eventType == net::BattleEventType::ClientAttackDamage)
-		{
-			actualEventType = net::BattleEventType::ClientAttackBlocked;
-		}
-	}
+	if (m_state.defending && eventType == net::BattleEventType::ClientAttackDamage)
+		actualEventType = net::BattleEventType::ClientAttackBlocked;
 
-	// 攻撃発動時の属性IDをフラグにパックして送受信双方が同期できるようにする
 	const uint32 flags = net::packAttributeId(net::EventFlagHitPlayer, m_state.enemyAttributeId);
-	emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
 
+	// クライアントへの通知は即時送信
 	if (broadcastToClient)
-	{
-		sendStateSync();
 		broadcastEventToClient(actualEventType, finalDamage, slotIndex, flags);
-	}
 
-	// カード飛翔演出を開始（有効なスロットの場合のみ）
-	// 優先順位: 詠唱時に保存したカード名 > クライアント視覚手札テーブル > ホストデッキ
+	// カード飛翔演出を開始し、到達時に適用するダメージ情報を登録
 	if (slotIndex >= 0)
 	{
 		String cardName;
 		if (!m_state.enemyCastingCardName.isEmpty())
-		{
 			cardName = m_state.enemyCastingCardName;
-		}
 		else if (slotIndex < 4)
 		{
 			const CardSpec* clientCard = m_deck.getCardByPoolIndex(m_clientVisualHand[static_cast<size_t>(slotIndex)]);
 			if (clientCard && !clientCard->name.isEmpty())
-			{
 				cardName = clientCard->name;
-			}
 		}
 		if (cardName.isEmpty() && slotIndex < static_cast<int>(m_deck.current().size()))
-		{
 			cardName = m_deck.getVisualCard(slotIndex).name;
-		}
 		if (cardName.isEmpty())
-		{
 			cardName = U"攻撃{}"_fmt(slotIndex + 1);
-		}
-		startEnemyProjectile(slotIndex, cardName);
+
+		startEnemyProjectile(slotIndex, cardName, m_state.defending);
+
+		auto& impact = m_enemyProjectile.pendingImpact;
+		impact.valid               = true;
+		impact.hpChange            = finalDamage;
+		impact.targetIsPlayer      = true;        // プレイヤーがダメージを受ける
+		impact.crazyGain           = crazyGain;
+		impact.crazyTargetIsEnemy  = false;
+		impact.eventType           = actualEventType;
+		impact.primaryValue        = finalDamage;
+		impact.secondaryValue      = slotIndex;
+		impact.flags               = flags;
+		impact.shouldSendStateSync  = broadcastToClient;
+		impact.shouldCheckBattleEnd = true;
+	}
+	else
+	{
+		// slotIndex < 0（PvE即時カウンターなど）：プロジェクタイルなしのため即時適用
+		m_state.playerHP = Max(0, m_state.playerHP - finalDamage);
+		if (crazyGain > 0)
+			BattleLogic::addCrazy(m_state, false, crazyGain);
+		BattleLogic::startHitEffect(m_state, BattleState::HitTarget::Player);
+		emitLocalEvent(actualEventType, finalDamage, slotIndex, flags);
+		if (broadcastToClient)
+			sendStateSync();
+		finishBattleIfNeeded();
 	}
 
 	replaceUsedCardIfNeeded();
-	finishBattleIfNeeded();
 }

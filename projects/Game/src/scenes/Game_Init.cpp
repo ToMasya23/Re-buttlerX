@@ -60,6 +60,7 @@ Game::Game(const InitData& init)
 
 	m_texPlayerIcon = s3d::Texture{ U"assets/ui/characters/player/player_icon.png" };
 	m_texWriting    = s3d::Texture{ U"assets/ui/writing.png" };
+	loadGuardEffectTexture();
 
 	if (getData().multiplayer)
 	{
@@ -88,6 +89,12 @@ Game::~Game()
 		g_networkLog.close();
 	}
 	AudioManager::instance().stopBGM();
+}
+
+void Game::loadGuardEffectTexture()
+{
+	// guard.png をロード
+	m_texGuardEffect = s3d::Texture{ U"assets/ui/command/guard.png", s3d::TextureDesc::Unmipped };
 }
 
 

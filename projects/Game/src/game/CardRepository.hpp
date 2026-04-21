@@ -66,6 +66,20 @@ namespace Cards
             if (jc[U"delay"].isNumber()) s.delaySec = static_cast<double>(jc[U"delay"].get<int32>());
             if (jc[U"weight"].isNumber()) s.weight = jc[U"weight"].get<double>();
             if (jc[U"attribute"].isNumber()) s.attributeId = jc[U"attribute"].get<int32>();
+            if (jc[U"effects"].isArray())
+            {
+                for (const auto& effect : jc[U"effects"].arrayView())
+                {
+                    if (!effect.isObject()) continue;
+                    if (!effect[U"type"].isString()) continue;
+                    const String type = effect[U"type"].getString();
+                    if (!effect[U"value"].isNumber()) continue;
+                    if (type == U"damageHP")
+                        s.damageHP = effect[U"value"].get<int32>();
+                    else if (type == U"addCrazy")
+                        s.addCrazy = effect[U"value"].get<int32>();
+                }
+            }
             loaded << s;
         }
         if (loaded.isEmpty())

@@ -9,7 +9,7 @@
 void Game::draw() const
 {
 	const Size sceneSize = Scene::Size();
-
+	
 	if ((!m_sceneRT) || (m_sceneRT.size() != sceneSize))
 	{
 		const_cast<Game*>(this)->m_sceneRT = RenderTexture{ sceneSize };
@@ -32,7 +32,7 @@ void Game::draw() const
 
 	{
 		const ScopedRenderTarget2D rt{ m_sceneRT };
-		
+
 		// ===== 背景 =====
 		if (m_texBattleBackground)
 		{
@@ -48,11 +48,25 @@ void Game::draw() const
 		const double t = m_state.hitTimer.sF();
 		const bool hitPlayer = (m_state.hitTarget == BattleState::HitTarget::Player) && (t < BattleState::HitDuration);
 		const bool hitEnemy  = (m_state.hitTarget == BattleState::HitTarget::Enemy)  && (t < BattleState::HitDuration);
-		const double flash = hitPlayer || hitEnemy ? (0.5 + 0.5 * Periodic::Square0_1(30.0)) : 0.0;
-		const ColorF playerColor = hitPlayer ? ColorF{ 1.0, 0.95 * flash, 0.95 * flash } : ColorF{ 1.0 };
-		const ColorF enemyColor  = hitEnemy  ? ColorF{ 1.0, 0.85 * flash, 0.85 * flash } : ColorF{ 1.0 };
+		const bool flashOn = (hitPlayer || hitEnemy) && (Periodic::Square0_1(10.0 / 30.0, t) > 0.5);
+		const ColorF flashColor = m_state.hitIsWeakness ? ColorF{ 1.0, 0.40, 0.40 } : ColorF{ 1.0, 0.65, 0.65 };
+		const ColorF playerColor = (hitPlayer && flashOn) ? flashColor : ColorF{ 1.0 };
+		const ColorF enemyColor  = (hitEnemy  && flashOn) ? flashColor : ColorF{ 1.0 };
 		const RectF pRect{ playerPos, BattleLayout::EntitySize };
 		const RectF eRect{ enemyPos,  BattleLayout::EntitySize };
+		
+		const bool playerGlitch = m_state.playerCrazyMode;
+		const bool enemyGlitch  = m_state.enemyCrazyMode;
+
+		// クレイジーモード時はグリッチ描画、通常時は通常描画
+		auto drawPlayer = [&](const s3d::Texture& tex, const RectF& rect, const ColorF& color) {
+			if (playerGlitch) drawGlitchEffect(tex, rect, color);
+			else              drawFit(tex, rect, color);
+		};
+		auto drawEnemy = [&](const s3d::Texture& tex, const RectF& rect, const ColorF& color) {
+			if (enemyGlitch) drawGlitchEffect(tex, rect, color);
+			else             drawFit(tex, rect, color);
+		};
 
 		// ===== オーラ =====
 		if (m_auraRenderer)
@@ -61,66 +75,85 @@ void Game::draw() const
 			m_auraRenderer->draw(eRect, m_state.enemyAttributeId);
 		}
 
-		// ===== プレイヤーキャラクター =====
-		if (m_playerAttackAnimActive)
+		// ===== 弱点シェイクオフセット計算 =====
+		auto calcShakeOffset = [&](bool isPlayer) -> double
 		{
-			const s3d::Texture* pAtk1 = &m_texPlayerAttackQuantity1;
-			const s3d::Texture* pAtk2 = &m_texPlayerAttackQuantity2;
-			if (m_state.playerAttributeId == 2)
-			{
-				pAtk1 = &m_texPlayerAttackQuality1;
-				pAtk2 = &m_texPlayerAttackQuality2;
-			}
-			else if (m_state.playerAttributeId == 3)
-			{
-				pAtk1 = &m_texPlayerAttackCounter1;
-				pAtk2 = &m_texPlayerAttackCounter2;
-			}
+			if (!m_weaknessShake.active || m_weaknessShake.isPlayer != isPlayer) return 0.0;
+			const double t = m_weaknessShake.timer.sF();
+			if (t >= WeaknessShakeEffect::Duration) return 0.0;
+			const double decay = 1.0 - t / WeaknessShakeEffect::Duration;
+			return WeaknessShakeEffect::Amplitude * decay
+				* Math::Sin(Math::TwoPi * WeaknessShakeEffect::Frequency * t);
+		};
+		const double playerShakeX = calcShakeOffset(true);
+		const double enemyShakeX  = calcShakeOffset(false);
 
-			const double elapsed = m_playerAttackAnimTimer.sF();
-			if (elapsed < AttackAnimFrame1Duration)
-				drawFit(*pAtk1, pRect, playerColor);
-			else
-				drawFit(*pAtk2, pRect, playerColor);
-		}
-		else
+		// ===== プレイヤーキャラクター =====
 		{
-			const s3d::Texture* pIdle = &m_texPlayer;
-			if      (m_state.playerAttributeId == 1 && m_texPlayerIdleQuantity) pIdle = &m_texPlayerIdleQuantity;
-			else if (m_state.playerAttributeId == 2 && m_texPlayerIdleQuality)  pIdle = &m_texPlayerIdleQuality;
-			else if (m_state.playerAttributeId == 3 && m_texPlayerIdleCounter)  pIdle = &m_texPlayerIdleCounter;
-			drawFit(*pIdle, pRect, playerColor);
+			const Transformer2D shakeTransform{ Mat3x2::Translate(playerShakeX, 0.0) };
+			if (m_playerAttackAnimActive)
+			{
+				const s3d::Texture* pAtk1 = &m_texPlayerAttackQuantity1;
+				const s3d::Texture* pAtk2 = &m_texPlayerAttackQuantity2;
+				if (m_state.playerAttributeId == 2)
+				{
+					pAtk1 = &m_texPlayerAttackQuality1;
+					pAtk2 = &m_texPlayerAttackQuality2;
+				}
+				else if (m_state.playerAttributeId == 3)
+				{
+					pAtk1 = &m_texPlayerAttackCounter1;
+					pAtk2 = &m_texPlayerAttackCounter2;
+				}
+
+				const double elapsed = m_playerAttackAnimTimer.sF();
+				if (elapsed < AttackAnimFrame1Duration)
+					drawPlayer(*pAtk1, pRect, playerColor);
+				else
+					drawPlayer(*pAtk2, pRect, playerColor);
+			}
+			else
+			{
+				const s3d::Texture* pIdle = &m_texPlayer;
+				if      (m_state.playerAttributeId == 1 && m_texPlayerIdleQuantity) pIdle = &m_texPlayerIdleQuantity;
+				else if (m_state.playerAttributeId == 2 && m_texPlayerIdleQuality)  pIdle = &m_texPlayerIdleQuality;
+				else if (m_state.playerAttributeId == 3 && m_texPlayerIdleCounter)  pIdle = &m_texPlayerIdleCounter;
+				drawPlayer(*pIdle, pRect, playerColor);
+			}
 		}
 
 		// ===== 敵キャラクター =====
-		if (m_enemyAttackAnimActive)
 		{
-			const s3d::Texture* pEAtk1 = &m_texEnemyAttackQuantity1;
-			const s3d::Texture* pEAtk2 = &m_texEnemyAttackQuantity2;
-			if (m_state.enemyAttributeId == 2)
+			const Transformer2D shakeTransform{ Mat3x2::Translate(enemyShakeX, 0.0) };
+			if (m_enemyAttackAnimActive)
 			{
-				pEAtk1 = &m_texEnemyAttackQuality1;
-				pEAtk2 = &m_texEnemyAttackQuality2;
-			}
-			else if (m_state.enemyAttributeId == 3)
-			{
-				pEAtk1 = &m_texEnemyAttackCounter1;
-				pEAtk2 = &m_texEnemyAttackCounter2;
-			}
+				const s3d::Texture* pEAtk1 = &m_texEnemyAttackQuantity1;
+				const s3d::Texture* pEAtk2 = &m_texEnemyAttackQuantity2;
+				if (m_state.enemyAttributeId == 2)
+				{
+					pEAtk1 = &m_texEnemyAttackQuality1;
+					pEAtk2 = &m_texEnemyAttackQuality2;
+				}
+				else if (m_state.enemyAttributeId == 3)
+				{
+					pEAtk1 = &m_texEnemyAttackCounter1;
+					pEAtk2 = &m_texEnemyAttackCounter2;
+				}
 
-			const double elapsed = m_enemyAttackAnimTimer.sF();
-			if (elapsed < AttackAnimFrame1Duration)
-				drawFit(*pEAtk1, eRect, enemyColor);
+				const double elapsed = m_enemyAttackAnimTimer.sF();
+				if (elapsed < AttackAnimFrame1Duration)
+					drawEnemy(*pEAtk1, eRect, enemyColor);
+				else
+					drawEnemy(*pEAtk2, eRect, enemyColor);
+			}
 			else
-				drawFit(*pEAtk2, eRect, enemyColor);
-		}
-		else
-		{
-			const s3d::Texture* pEIdle = &m_texEnemy;
-			if      (m_state.enemyAttributeId == 1 && m_texEnemyIdleQuantity) pEIdle = &m_texEnemyIdleQuantity;
-			else if (m_state.enemyAttributeId == 2 && m_texEnemyIdleQuality)  pEIdle = &m_texEnemyIdleQuality;
-			else if (m_state.enemyAttributeId == 3 && m_texEnemyIdleCounter)  pEIdle = &m_texEnemyIdleCounter;
-			drawFit(*pEIdle, eRect, enemyColor);
+			{
+				const s3d::Texture* pEIdle = &m_texEnemy;
+				if      (m_state.enemyAttributeId == 1 && m_texEnemyIdleQuantity) pEIdle = &m_texEnemyIdleQuantity;
+				else if (m_state.enemyAttributeId == 2 && m_texEnemyIdleQuality)  pEIdle = &m_texEnemyIdleQuality;
+				else if (m_state.enemyAttributeId == 3 && m_texEnemyIdleCounter)  pEIdle = &m_texEnemyIdleCounter;
+				drawEnemy(*pEIdle, eRect, enemyColor);
+			}
 		}
 
 		// ===== HP バー =====
@@ -341,10 +374,15 @@ void Game::draw() const
 				.draw(20, Vec2{ gaugePos.x + gaugeWidth + 10, gaugePos.y + 2 }, ColorF{ 1.0 });
 		}
 
-		// ===== 敵の詠唱中表示 =====
+		// ===== 詠唱中表示 =====
+		if (m_state.playerCasting && m_texWriting)
+		{
+			const Vec2 imgPos = Vec2{ playerPos.x + entitySize.x * 0.48, playerPos.y + entitySize.y * 0.22 };
+			m_texWriting.draw(imgPos);
+		}
 		if (m_state.enemyCasting && m_texWriting)
 		{
-			const Vec2 imgPos = Vec2{ enemyPos.x + entitySize.x * 0.48, enemyPos.y + entitySize.y * 0.22};
+			const Vec2 imgPos = Vec2{ enemyPos.x + entitySize.x * 0.48, enemyPos.y + entitySize.y * 0.22 };
 			m_texWriting.draw(imgPos);
 		}
 
@@ -355,7 +393,7 @@ void Game::draw() const
 
 			const double elapsed = proj.timer.sF();
 
-			if (proj.isBlinking)
+			if (proj.isBlinking && !proj.isBlocked)
 			{
 				const double blinkElapsed  = elapsed - CardProjectile::FlightDuration;
 				const double blinkProgress = blinkElapsed / CardProjectile::BlinkDuration;
@@ -398,6 +436,26 @@ void Game::draw() const
 
 		drawProjectile(m_playerProjectile);
 		drawProjectile(m_enemyProjectile);
+
+		// ===== 防御成功エフェクト =====
+		if (m_guardEffect.active)
+		{
+			const double elapsed = m_guardEffect.timer.sF();
+			if (elapsed < GuardEffect::Duration)
+			{
+				const double t = elapsed / GuardEffect::Duration;
+				const double alpha = 1.0 - t;
+				const double iconSize = 320.0 + 160.0 * t; // 拡大しながらフェードアウト
+				if (m_texGuardEffect)
+					m_texGuardEffect.resized(iconSize).drawAt(m_guardEffect.pos, ColorF{ 1.0, alpha });
+				else
+					Circle{ m_guardEffect.pos, iconSize * 0.5 }.draw(ColorF{ 0.3, 0.7, 1.0, alpha });
+			}
+			else
+			{
+				m_guardEffect.active = false;
+			}
+		}
 	}
 
 	// ===== ポーズエフェクト =====
@@ -411,7 +469,45 @@ void Game::draw() const
 	}
 	else
 	{
-		m_sceneRT.draw();
+		// ===== クレイジーモード突入ズーム演出 =====
+		if (m_crazyZoom.active)
+		{
+			const double elapsed  = m_crazyZoom.timer.sF();
+			const double t        = Clamp(elapsed / CrazyZoomEffect::Duration, 0.0, 1.0);
+
+			// ズーム曲線: 0→0.25 急拡大, 0.25→0.9375(=1.5s) ピーク維持, 0.9375→1.0(=0.1s) 急縮小
+			// Duration=1.6s なので 1.5/1.6=0.9375
+			constexpr double ZoomInEnd  = 0.25 / CrazyZoomEffect::Duration;   // ≈0.156
+			constexpr double ZoomOutStart = 1.5  / CrazyZoomEffect::Duration;  // =0.9375
+			double zoom;
+			if (t < ZoomInEnd)
+				zoom = 1.0 + (CrazyZoomEffect::PeakZoom - 1.0) * EaseOutQuad(t / ZoomInEnd);
+			else if (t < ZoomOutStart)
+				zoom = CrazyZoomEffect::PeakZoom;
+			else
+				zoom = 1.0 + (CrazyZoomEffect::PeakZoom - 1.0) * (1.0 - EaseInQuad((t - ZoomOutStart) / (1.0 - ZoomOutStart)));
+
+			// ズームの中心: キャラクター矩形の中心
+			const Vec2 pivot = m_crazyZoom.isPlayer
+				? BattleLayout::PlayerPos(sceneSize) + Vec2{ BattleLayout::EntitySize } * 0.5
+				: BattleLayout::EnemyPos(sceneSize)  + Vec2{ BattleLayout::EntitySize } * 0.5;
+
+			{
+				const Transformer2D zoomTransform{ Mat3x2::Scale(zoom, pivot) };
+				m_sceneRT.draw();
+			}
+
+			// 突入直後の白フラッシュ
+			if (t < 0.18)
+			{
+				const double flashAlpha = (1.0 - t / 0.18) * 0.75;
+				Rect{ sceneSize }.draw(ColorF{ 1.0, flashAlpha });
+			}
+		}
+		else
+		{
+			m_sceneRT.draw();
+		}
 		Cursor::RequestStyle(CursorStyle::Default);
 	}
 

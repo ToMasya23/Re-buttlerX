@@ -28,7 +28,7 @@ struct BattleState
     bool enemyCrazyMode = false;
     double playerCrazyModeStartTime = 0.0;
     double enemyCrazyModeStartTime = 0.0;
-    static constexpr double CrazyModeDurationSec = 30.0;
+    static constexpr double CrazyModeDurationSec = 15.0;
 
     // メッセージ
     String battleMessage;
@@ -37,7 +37,8 @@ struct BattleState
     enum class HitTarget { None, Player, Enemy };
     HitTarget hitTarget = HitTarget::None;
     Stopwatch hitTimer{ StartImmediately::No };
-    static constexpr double HitDuration = 0.25;
+    bool hitIsWeakness = false;
+    static constexpr double HitDuration = 0.5;
 
     // ===== 詠唱システム =====
     bool playerCasting = false;
